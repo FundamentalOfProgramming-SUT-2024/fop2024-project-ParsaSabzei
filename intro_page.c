@@ -82,16 +82,6 @@ void change_status(){
     printw("Current Selected : %s", msg[status]);
     status ^= 1;
 }
-void trig(WINDOW* btn, int color, int *active){
-    if(*active == 1)
-        init_pair(color + 5, 0, color);
-    else    
-        init_pair(color + 5, color, 0);
-    wbkgd(btn, COLOR_PAIR(color + 5));
-    *active ^= 1;
-    wrefresh(btn);
-    refresh();
-}
 
 // Press ENTER or 'c' to continue
 // returns 1 for newuser and -1 for login btn

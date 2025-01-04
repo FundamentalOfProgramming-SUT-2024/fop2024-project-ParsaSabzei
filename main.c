@@ -17,6 +17,7 @@
 #include "intro_page.c"
 #include "newuser.c"
 #include "loginuser.c"
+#include "pregame.c"
 
 int main(){
     //init
@@ -42,7 +43,8 @@ int main(){
         loginuser_draw_main_screen(mn);
         char* username = loginuser_handle_uinput();
         clear();
-        printw("%s", username);
+        pregame_draw_main_screen(mn, username);
+        pregame_handle_input();
     }
     getch();
     endwin();
