@@ -26,17 +26,18 @@ int regex_match(char*msg, char*reg){
 //color pair 1 -> white
 // .. random
 
+int random_num(int min, int max){
+    return rand() % (max - min + 1) + min;
+}
 int st_color();
 void random_color();
 const int RANDOM_COLORS = 8;
-
 int st_color(){
     start_color();
     random_color();  
     //attron(COLOR_PAIR(1));
     return can_change_color();
 }
-
 void random_color(){
     init_color(0, 0, 0, 0);
     init_color(1, 1000, 1000, 1000);
@@ -49,7 +50,6 @@ void random_color(){
         init_pair(i, i, 0);
     }
 }
-
 int red(){
     int i = rand() % 100 + 10;
     init_color(i, 1000, 0, 0);

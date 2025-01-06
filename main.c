@@ -18,6 +18,7 @@
 #include "newuser.c"
 #include "loginuser.c"
 #include "pregame.c"
+#include "game.c"
 
 int main(){
     //init
@@ -44,7 +45,9 @@ int main(){
         char* username = loginuser_handle_uinput();
         clear();
         pregame_draw_main_screen(mn, username);
-        pregame_handle_input();
+        int scr = pregame_handle_input();
+        if(scr == 0) // create new game button
+            init_game(mn, username);
     }
     getch();
     endwin();
