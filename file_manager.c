@@ -1,4 +1,4 @@
-#define N (int)1e4
+#define maxbuf (int)1e4
 const char* users_file_path = "storage/user.csv";
 
 int user_exists(char*);
@@ -7,8 +7,8 @@ int match_password(char*, char*);
 
 int user_exists(char*username){
     FILE* fp = fopen(users_file_path, "r");
-    char buffer[N];
-    while (fgets(buffer, N, fp)) {
+    char buffer[maxbuf];
+    while (fgets(buffer, maxbuf, fp)) {
         int column = 0;
         char* value = strtok(buffer, ", ");
         while (value) {
@@ -25,8 +25,8 @@ int user_exists(char*username){
 
 int match_password(char*username, char*password){
     FILE* fp = fopen(users_file_path, "r");
-    char buffer[N];
-    while (fgets(buffer, N, fp)) {
+    char buffer[maxbuf];
+    while (fgets(buffer, maxbuf, fp)) {
         int column = 0;
         char* value = strtok(buffer, ", ");
         int here = 0;

@@ -13,7 +13,7 @@
 
 #include "file_manager.c"
 #include "input.c"
-#include "utils.c"
+#include "utils.h"
 #include "intro_page.c"
 #include "newuser.c"
 #include "loginuser.c"

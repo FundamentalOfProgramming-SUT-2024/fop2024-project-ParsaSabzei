@@ -1,4 +1,12 @@
+#ifndef UTILS_H
+#define UTILS_H
 #include<regex.h>
+
+#define ROOM_BORDER_COLOR 15
+#define ROOM_INSIDE_COLOR 16
+#define PILLAR_COLOR 18
+#define DOOR_COLOR 17
+#define TRAP_COLOR 19
 
 int is_dig(char ch){
     return (ch >= '0' && ch <= '9');
@@ -32,10 +40,24 @@ int random_num(int min, int max){
 int st_color();
 void random_color();
 const int RANDOM_COLORS = 8;
+
 int st_color(){
     start_color();
     random_color();  
-    //attron(COLOR_PAIR(1));
+    init_color(ROOM_BORDER_COLOR, 1000, 372, 121);
+    init_pair(ROOM_BORDER_COLOR, ROOM_BORDER_COLOR, 0);
+
+    init_color(ROOM_INSIDE_COLOR, 0, 1000, 121);
+    init_pair(ROOM_INSIDE_COLOR, ROOM_INSIDE_COLOR, 0);
+
+    init_color(DOOR_COLOR, 1000, 1000, 0);
+    init_pair(DOOR_COLOR, DOOR_COLOR, 0);
+
+    init_color(PILLAR_COLOR, 1000, 500, 500);
+    init_pair(PILLAR_COLOR, PILLAR_COLOR, 0);
+
+    init_color(TRAP_COLOR, 0, 500, 500);
+    init_pair(TRAP_COLOR, TRAP_COLOR, 0);
     return can_change_color();
 }
 void random_color(){
@@ -56,3 +78,4 @@ int red(){
     init_pair(i, i, 0);
     return i;
 }
+#endif
