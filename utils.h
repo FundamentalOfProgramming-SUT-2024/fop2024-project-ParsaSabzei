@@ -7,6 +7,7 @@
 #define PILLAR_COLOR 18
 #define DOOR_COLOR 17
 #define TRAP_COLOR 19
+#define STAIR_COLOR 20
 
 int is_dig(char ch){
     return (ch >= '0' && ch <= '9');
@@ -58,6 +59,9 @@ int st_color(){
 
     init_color(TRAP_COLOR, 0, 500, 500);
     init_pair(TRAP_COLOR, TRAP_COLOR, 0);
+
+    init_color(STAIR_COLOR, 456, 100, 500);
+    init_pair(STAIR_COLOR, STAIR_COLOR, 0);
     return can_change_color();
 }
 void random_color(){

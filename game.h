@@ -4,6 +4,8 @@
 
 #define N 200
 
+#define NUMBER_OF_FLOORS 3
+
 #define Padding 2
 
 #define HOW_FAR_SEE 5
@@ -16,8 +18,8 @@
 #define number_of_traps_min 0
 #define number_of_traps_max 1
 
-#define number_of_room_min 6
-#define number_of_rooms_max 8
+#define number_of_room_min 8
+#define number_of_rooms_max 5
 
 // room width and height include border
 #define room_width_min 8
@@ -35,8 +37,15 @@ enum type{
     Corridor,
     Door,
     Pillar,
-    Trap
+    Trap,
+    StairUp,
+    StairDown
 };
+
+typedef struct Pair{
+    int x;
+    int y;
+} Pair;
 
 //  0
 //3   1
@@ -60,11 +69,18 @@ typedef struct Room{
     int discovered;
 } Room;
 
-typedef struct Game{
+typedef struct Tabaghe{
     int number_of_rooms;
     Room** rooms;
     Point* map[N][N];
+} Tabaghe;
+
+typedef struct Game{
+    int floor_count;
+    int cf; // current floor
+    Tabaghe** floors;
     Player* player;
+    bool ignore_hiding;
 } Game;
 
 
@@ -76,13 +92,13 @@ int inf = 1e9;
 Room* create_room(int, int, int, int);
 void init_game(WINDOW*, char*);
 void fill(Room*);
-int check_room_overlap(int, int, int, int);
-void generate_rooms();
+int check_room_overlap(int, int, int, int, int);
+void generate_rooms(int, int);
 void generate_corridors();
 int is_game_connected();
-void dfs();
-int bfs(int, int);
-void make_corridor(int, int);
+void dfs(int, int, int);
+int bfs(int, int, int);
+void make_corridor(int, int, int);
 void handle_input();
 void draw_item(int, int, enum type);
 int valid(int, int);
@@ -92,12 +108,30 @@ void draw_map();
 void draw_pillar(int, int);
 void draw_corridor(int, int);
 void draw_room(Room*);
-int get_room_from_point(int, int);
-void activate_room(int);
-void activate_corridor(int, int);
+void draw_stair_up(int, int);
+void draw_stair_down(int, int);
+int get_room_from_point(int, int, int);
+void activate_room(int, int);
+void activate_corridor(int, int, int);
 int dist(int, int, int, int);
-void generate_traps();
+void generate_traps(int);
+void generate_floor(int, int);
+void generate_stair_up(int);
+void generate_stair_down(int);
+void move_to_floor(int);
 
+Pair find_in_room(int room_id, int floor_id, enum type tp){
+    int sx = game->floors[floor_id]->rooms[room_id]->startx, ex = game->floors[floor_id]->rooms[room_id]->h;
+    int sy = game->floors[floor_id]->rooms[room_id]->starty, ey = game->floors[floor_id]->rooms[room_id]->w;
+    for(int i = sx; i < sx + ex; i++)
+        for(int j = sy; j < sy + ey; j++)
+            if(game->floors[floor_id]->map[i][j]->type == tp){
+                Pair p = {i, j};
+                return p;
+            }
+    Pair p = {-1, -1};
+    return p;
+}
 Room* create_room(int startx, int starty, int w, int h){
     Room* room = (Room*)malloc(sizeof(Room));
     room->win = newwin(h, w, startx, starty);
@@ -109,14 +143,17 @@ Room* create_room(int startx, int starty, int w, int h){
 void draw_room(Room* room){
     wattron(room->win, COLOR_PAIR(ROOM_BORDER_COLOR));
     box(room->win, 0, 0);
+    refresh();
+    wrefresh(room->win);
     wattroff(room->win, COLOR_PAIR(ROOM_BORDER_COLOR));
-     wattron(room->win, COLOR_PAIR(ROOM_INSIDE_COLOR));
+    wattron(room->win, COLOR_PAIR(ROOM_INSIDE_COLOR));
     for(int i = 1; i < room->h - 1; i++)
         for(int j = 1; j < room->w - 1; j++)
             mvwprintw(room->win, i, j, ".");
     wattroff(room->win, COLOR_PAIR(ROOM_INSIDE_COLOR));
-    refresh();
     wrefresh(room->win);
+    refresh();
+
 }
 void draw_pillar(int i, int j){
     attron(COLOR_PAIR(PILLAR_COLOR));
@@ -134,7 +171,7 @@ void draw_door(int i, int j){
     attroff(COLOR_PAIR(DOOR_COLOR));    
 }
 void draw_trap(int i, int j){
-    if(game->map[i][j]->activated == 0){
+    if(game->floors[game->cf]->map[i][j]->activated == 0){
         attron(COLOR_PAIR(ROOM_INSIDE_COLOR));
         mvprintw(i, j, ".");
         attroff(COLOR_PAIR(ROOM_INSIDE_COLOR));
@@ -143,6 +180,16 @@ void draw_trap(int i, int j){
         mvprintw(i, j, "^");
         attroff(COLOR_PAIR(TRAP_COLOR)); 
     }
+}
+void draw_stair_up(int i, int j){
+    attron(COLOR_PAIR(STAIR_COLOR));
+    mvprintw(i, j, ">");
+    attroff(COLOR_PAIR(STAIR_COLOR));    
+}
+void draw_stair_down(int i, int j){
+    attron(COLOR_PAIR(STAIR_COLOR));
+    mvprintw(i, j, "<");
+    attroff(COLOR_PAIR(STAIR_COLOR));    
 }
 void draw_item(int i, int j, enum type tp){
     switch(tp){
@@ -163,6 +210,12 @@ void draw_item(int i, int j, enum type tp){
         case Trap:
             draw_trap(i, j);
             break;
+        case StairUp:
+            draw_stair_up(i, j);
+            break;
+        case StairDown:
+            draw_stair_down(i, j);
+            break;
     }
 }
 void draw_player(){
@@ -171,32 +224,39 @@ void draw_player(){
 int valid(int x, int y){
     return x >= 0 && y >= 0 && x < LINES && y < COLS;
 }
-int get_room_from_point(int x, int y){
-    for(int i = 0; i < game->number_of_rooms; i++){
-        int stx = game->rooms[i]->startx, enx = game->rooms[i]->h + stx;
-        int sty =  game->rooms[i]->starty, eny = game->rooms[i]->w + sty;
+int get_room_from_point(int x, int y, int id){
+    for(int i = 0; i < game->floors[id]->number_of_rooms; i++){
+        int stx = game->floors[id]->rooms[i]->startx, enx = game->floors[id]->rooms[i]->h + stx;
+        int sty =  game->floors[id]->rooms[i]->starty, eny = game->floors[id]->rooms[i]->w + sty;
         if(x >= stx && x < enx && y >= sty && y < eny)
             return i;
     }
     return EOF;
 }
-void activate_room(int i){
-    int stx = game->rooms[i]->startx, enx = game->rooms[i]->h + stx;
-    int sty =  game->rooms[i]->starty, eny = game->rooms[i]->w + sty;
-    game->rooms[i]->discovered = 1;
+void activate_room(int i, int id){
+    int stx = game->floors[id]->rooms[i]->startx, enx = game->floors[id]->rooms[i]->h + stx;
+    int sty =  game->floors[id]->rooms[i]->starty, eny = game->floors[id]->rooms[i]->w + sty;
+    game->floors[id]->rooms[i]->discovered = 1;
     for(int x = stx; x < enx; x++)
         for(int y = sty; y < eny; y++)
-            game->map[x][y]->discovered = 1;
+            game->floors[id]->map[x][y]->discovered = 1;
 }
-void activate_corridor(int x, int y){
+void activate_corridor(int x, int y, int id){
     for(int i = 0; i < LINES; i++)
         for(int j = 0; j < COLS; j++)
-            if(game->map[i][j]->type == Corridor && dist(x, y, i, j) <= HOW_FAR_SEE)
-                game->map[i][j]->discovered = 1;
+            if(game->floors[id]->map[i][j]->type == Corridor && dist(x, y, i, j) <= HOW_FAR_SEE)
+                game->floors[id]->map[i][j]->discovered = 1;
 }
 
 //Calculate distance between two point
 int dist(int x, int y, int nx, int ny){
     return abs(x - nx) + abs(ny - y);
+}
+
+int min(int x, int y){
+    return x > y ? y : x;
+}
+int max(int x, int y){
+    return x > y ? x : y;
 }
 #endif 
