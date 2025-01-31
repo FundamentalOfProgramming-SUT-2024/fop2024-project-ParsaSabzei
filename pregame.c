@@ -92,6 +92,8 @@ int pregame_handle_input(){
             cur_btn = (cur_btn + btn_counts - 1) % btn_counts;
             des = 1;
         }else if(c == 10 || c == 'c'){
+            //deselect current button
+            trig(btns[prev], start_color_index + prev, &active[prev]);
             return cur_btn;
         }else   //Ignore others
             continue;

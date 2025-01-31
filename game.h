@@ -6,7 +6,7 @@
 
 #define NUMBER_OF_FLOORS 3
 
-#define Padding 2
+#define Padding 4
 
 #define HOW_FAR_SEE 5
 
@@ -86,6 +86,9 @@ typedef struct Game{
 
 
 Game* game;
+WINDOW* status_win;
+Settings setting;
+int basic_colors[N];
 int dx[4] = {+1, -1, 0, 0}, dy[4] = {0, 0, +1, -1};
 int inf = 1e9;
 
@@ -119,6 +122,7 @@ void generate_floor(int, int);
 void generate_stair_up(int);
 void generate_stair_down(int);
 void move_to_floor(int);
+void init_status_bar();
 
 Pair find_in_room(int room_id, int floor_id, enum type tp){
     int sx = game->floors[floor_id]->rooms[room_id]->startx, ex = game->floors[floor_id]->rooms[room_id]->h;
@@ -219,7 +223,9 @@ void draw_item(int i, int j, enum type tp){
     }
 }
 void draw_player(){
-     mvprintw(game->player->x, game->player->y, "@");
+    attron(COLOR_PAIR(basic_colors[setting.Player_Color]));
+    mvprintw(game->player->x, game->player->y, "@");
+    attroff(COLOR_PAIR(basic_colors[setting.Player_Color]));
 }
 int valid(int x, int y){
     return x >= 0 && y >= 0 && x < LINES && y < COLS;

@@ -1,5 +1,6 @@
 #ifndef UTILS_H
 #define UTILS_H
+
 #include<regex.h>
 
 #define ROOM_BORDER_COLOR 15
@@ -77,8 +78,20 @@ void random_color(){
     }
 }
 int red(){
-    int i = rand() % 100 + 10;
+    int i = rand() % 100 + 100;
     init_color(i, 1000, 0, 0);
+    init_pair(i, i, 0);
+    return i;
+}
+int blue(){
+    int i = rand() % 100 + 100;
+    init_color(i, 0, 0, 1000);
+    init_pair(i, i, 0);
+    return i;
+}
+int yellow(){
+    int i = rand() % 100 + 100;
+    init_color(i, 1000, 1000, 0);
     init_pair(i, i, 0);
     return i;
 }

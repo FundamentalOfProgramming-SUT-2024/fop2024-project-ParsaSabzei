@@ -3,6 +3,17 @@
 
 char *username;
 
+
+void update_status(){
+    box(status_win, 0, 0);
+    mvwprintw(status_win, 1, 2, "Floor: %d", game->cf + 1);
+    wrefresh(status_win);
+    refresh();
+}
+void init_status_bar(){
+    status_win = newwin(3, COLS - 2, 0, 0);
+    update_status();
+}
 void generate_floor(int id, int stair_room){
     for(int i = 0; i < LINES; i++)
         for(int j = 0; j < COLS; j++){
@@ -30,6 +41,9 @@ void generate_floor(int id, int stair_room){
 void init_game(WINDOW* main, char*_username){
     username = _username;
 
+    setting = load_settings(username);
+    basic_colors[0] = red(), basic_colors[1] = yellow(), basic_colors[2] = blue();
+    
     //init
     clear();
     noecho();
@@ -61,11 +75,14 @@ void init_game(WINDOW* main, char*_username){
 
     draw_map(0);
     refresh();
+
+    init_status_bar();
     handle_input();
 }
 
 void move_to_floor(int id){
     game->cf = id;
+    update_status();
     activate_room(0, id);
     draw_map(id);
 }
@@ -83,6 +100,7 @@ void draw_map(int id){
             refresh();
         }
     draw_player();
+    update_status();
     refresh();
 }
 void handle_input(){
