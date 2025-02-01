@@ -1,10 +1,11 @@
 #ifndef GAME_H
 #define GAME_H
-
+#include "utils.h"
 
 #define N 200
 
-#define NUMBER_OF_FLOORS 3
+#define MIN_NUMBER_OF_FLOORS 4
+#define MAX_NUMBER_OF_FLOORS 5
 
 #define Padding 4
 
@@ -15,8 +16,14 @@
 #define number_of_pillar_min 0
 #define number_of_pillar_max 2
 
+#define number_of_gold_min 0
+#define number_of_gold_max 8
+
 #define number_of_traps_min 0
 #define number_of_traps_max 1
+
+// x in 10
+#define black_gold_prob 1
 
 #define number_of_room_min 8
 #define number_of_rooms_max 5
@@ -39,21 +46,18 @@ enum type{
     Pillar,
     Trap,
     StairUp,
-    StairDown
+    StairDown,
+    Gold,
+    Black_Gold
 };
 
-typedef struct Pair{
-    int x;
-    int y;
-} Pair;
 
-//  0
-//3   1
-//  2
+
 typedef struct Player{
     int x, y;
-    int dir;
     int health;
+    int Golds;
+    int black_golds;
 } Player;
 
 typedef struct Point{
@@ -88,12 +92,18 @@ typedef struct Game{
 Game* game;
 WINDOW* status_win;
 Settings setting;
+
+const char* GOLD_UNICODE = "\u2756";
+const char* BLACK_GOLD_UNICODE = "\u25c8";
+const char* ARROW_UP_UNICODE = "\u2191";
+const char* ARROW_DOWN_UNICODE = "\u2193";
+
 int basic_colors[N];
 int dx[4] = {+1, -1, 0, 0}, dy[4] = {0, 0, +1, -1};
 int inf = 1e9;
 
 Room* create_room(int, int, int, int);
-void init_game(WINDOW*, char*);
+void init_game(WINDOW*, char*, int);
 void fill(Room*);
 int check_room_overlap(int, int, int, int, int);
 void generate_rooms(int, int);
@@ -104,6 +114,7 @@ int bfs(int, int, int);
 void make_corridor(int, int, int);
 void handle_input();
 void draw_item(int, int, enum type);
+void draw_gold(int, int);
 int valid(int, int);
 void draw_player();
 void generate_pillar();
@@ -120,9 +131,12 @@ int dist(int, int, int, int);
 void generate_traps(int);
 void generate_floor(int, int);
 void generate_stair_up(int);
-void generate_stair_down(int);
+void generate_golds(int);
+void generate_black_golds(int);
 void move_to_floor(int);
 void init_status_bar();
+void show_message(char* msg);
+void clear_buttom_status_bar();
 
 Pair find_in_room(int room_id, int floor_id, enum type tp){
     int sx = game->floors[floor_id]->rooms[room_id]->startx, ex = game->floors[floor_id]->rooms[room_id]->h;
@@ -185,14 +199,24 @@ void draw_trap(int i, int j){
         attroff(COLOR_PAIR(TRAP_COLOR)); 
     }
 }
+void draw_gold(int i, int j){
+    attron(COLOR_PAIR(basic_colors[1]));
+    mvaddstr(i, j, GOLD_UNICODE);
+    attroff(COLOR_PAIR(basic_colors[1]));
+}
+void draw_black_gold(int i, int j){
+    attron(COLOR_PAIR(BLACK_GOLD_COLOR) | A_BLINK);
+    mvaddstr(i, j, BLACK_GOLD_UNICODE);
+    attroff(COLOR_PAIR(BLACK_GOLD_COLOR) | A_BLINK);
+}
 void draw_stair_up(int i, int j){
     attron(COLOR_PAIR(STAIR_COLOR));
-    mvprintw(i, j, ">");
+    mvprintw(i, j, "%s", ARROW_UP_UNICODE);
     attroff(COLOR_PAIR(STAIR_COLOR));    
 }
 void draw_stair_down(int i, int j){
     attron(COLOR_PAIR(STAIR_COLOR));
-    mvprintw(i, j, "<");
+    mvprintw(i, j, "%s",ARROW_DOWN_UNICODE);
     attroff(COLOR_PAIR(STAIR_COLOR));    
 }
 void draw_item(int i, int j, enum type tp){
@@ -219,6 +243,12 @@ void draw_item(int i, int j, enum type tp){
             break;
         case StairDown:
             draw_stair_down(i, j);
+            break;
+        case Gold:
+            draw_gold(i, j);
+            break;
+        case Black_Gold:
+            draw_black_gold(i, j);
             break;
     }
 }
@@ -253,7 +283,13 @@ void activate_corridor(int x, int y, int id){
             if(game->floors[id]->map[i][j]->type == Corridor && dist(x, y, i, j) <= HOW_FAR_SEE)
                 game->floors[id]->map[i][j]->discovered = 1;
 }
-
+void show_message(char*msg){
+    mvprintw(LINES - 1, (COLS - strlen(msg))/2, "%s", msg);
+}
+void clear_buttom_status_bar(){
+    for(int i = 0; i < COLS; i++)
+        mvprintw(LINES - 1, i, " ");
+}
 //Calculate distance between two point
 int dist(int x, int y, int nx, int ny){
     return abs(x - nx) + abs(ny - y);

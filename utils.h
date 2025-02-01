@@ -9,6 +9,7 @@
 #define DOOR_COLOR 17
 #define TRAP_COLOR 19
 #define STAIR_COLOR 20
+#define BLACK_GOLD_COLOR 21
 
 int is_dig(char ch){
     return (ch >= '0' && ch <= '9');
@@ -32,6 +33,37 @@ int regex_match(char*msg, char*reg){
     return 0;
 }
 
+char* tostring(int N) {
+    if(N == 0)
+        return "0";
+    int i = 0;
+    char* str = malloc(100);
+    int sign = N;
+    while (N > 0) {
+        str[i++] = N % 10 + '0';
+      	N /= 10;
+    } 
+    str[i] = '\0';
+    for (int j = 0, k = i - 1; j < k; j++, k--) {
+        char temp = str[j];
+        str[j] = str[k];
+        str[k] = temp;
+    }
+    return str;
+}
+
+char* append(char* a, char* b){
+    char* ans = malloc(strlen(a) + strlen(b));
+    strcpy(ans, a);
+    strcat(ans, b);
+    return ans;
+}
+
+void swap(int*a, int*b){
+    int tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
 //color pair 0 -> black
 //color pair 1 -> white
 // .. random
@@ -63,6 +95,9 @@ int st_color(){
 
     init_color(STAIR_COLOR, 456, 100, 500);
     init_pair(STAIR_COLOR, STAIR_COLOR, 0);
+
+    init_color(BLACK_GOLD_COLOR, 1000, 900, 1000);
+    init_pair(BLACK_GOLD_COLOR, BLACK_GOLD_COLOR, 0);
     return can_change_color();
 }
 void random_color(){
@@ -78,19 +113,19 @@ void random_color(){
     }
 }
 int red(){
-    int i = rand() % 100 + 100;
+    int i = rand() % 50 + 100;
     init_color(i, 1000, 0, 0);
     init_pair(i, i, 0);
     return i;
 }
 int blue(){
-    int i = rand() % 100 + 100;
+    int i = rand() % 50 + 100;
     init_color(i, 0, 0, 1000);
     init_pair(i, i, 0);
     return i;
 }
 int yellow(){
-    int i = rand() % 100 + 100;
+    int i = rand() % 50 + 100;
     init_color(i, 1000, 1000, 0);
     init_pair(i, i, 0);
     return i;

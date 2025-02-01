@@ -7,6 +7,15 @@ char *username;
 void update_status(){
     box(status_win, 0, 0);
     mvwprintw(status_win, 1, 2, "Floor: %d", game->cf + 1);
+
+    wattron(status_win, COLOR_PAIR(basic_colors[1]));
+    mvwprintw(status_win, 1, 20, "%s: %d", GOLD_UNICODE, game->player->Golds);
+    wattroff(status_win, COLOR_PAIR(basic_colors[1]));
+
+    wattron(status_win, COLOR_PAIR(BLACK_GOLD_COLOR));
+    mvwprintw(status_win, 1, 30, "%s: %d", BLACK_GOLD_UNICODE, game->player->black_golds);
+    wattroff(status_win, COLOR_PAIR(BLACK_GOLD_COLOR));
+
     wrefresh(status_win);
     refresh();
 }
@@ -15,8 +24,8 @@ void init_status_bar(){
     update_status();
 }
 void generate_floor(int id, int stair_room){
-    for(int i = 0; i < LINES; i++)
-        for(int j = 0; j < COLS; j++){
+    for(int i = 0; i < N; i++)
+        for(int j = 0; j < N; j++){
             game->floors[id]->map[i][j] = (Point*)malloc(sizeof(Point));
             game->floors[id]->map[i][j]->discovered = 0;
             game->floors[id]->map[i][j]->activated = 0;
@@ -33,33 +42,25 @@ void generate_floor(int id, int stair_room){
         Pair stair_pos = find_in_room(stair_room, id - 1, StairUp);
         game->floors[id]->map[stair_pos.x][stair_pos.y]->type = StairDown;
     }
-
-    if(id != NUMBER_OF_FLOORS - 1)
+    generate_golds(id);
+    generate_black_golds(id);
+    if(id != game->floor_count - 1)
        generate_stair_up(id); 
 }
-
-void init_game(WINDOW* main, char*_username){
-    username = _username;
-
-    setting = load_settings(username);
-    basic_colors[0] = red(), basic_colors[1] = yellow(), basic_colors[2] = blue();
-    
-    //init
-    clear();
-    noecho();
-    curs_set(false);
-
+void create_new_game(){
     game = (Game*)malloc(sizeof(Game));
     game->player = (Player*)malloc(sizeof(Player));
-    game->floors = (Tabaghe**)malloc(sizeof(Tabaghe*) * NUMBER_OF_FLOORS);
-    for(int i = 0; i < NUMBER_OF_FLOORS; i++)
+    game->floor_count = random_num(MIN_NUMBER_OF_FLOORS, MAX_NUMBER_OF_FLOORS);
+
+    game->floors = (Tabaghe**)malloc(sizeof(Tabaghe*) * game->floor_count);
+    for(int i = 0; i < game->floor_count; i++)
         game->floors[i] = (Tabaghe*)malloc(sizeof(Tabaghe));
 
     game->cf = 0;
     game->ignore_hiding = 0;
 
     generate_floor(0, -1);
-    for(int i = 1; i < NUMBER_OF_FLOORS; i++){
+    for(int i = 1; i < game->floor_count; i++){
         int room = -1;
         for(int j = 0; j < game->floors[i - 1]->number_of_rooms; j++)
             if(find_in_room(j, i - 1, StairUp).x != -1)
@@ -67,26 +68,42 @@ void init_game(WINDOW* main, char*_username){
         generate_floor(i, room);
     }
 
-    //Player initial place
+    //initing player
+    game->player->Golds = 0;
+    game->player->black_golds = 0;
+    game->player->health = 0;
     game->player->x = game->floors[0]->rooms[0]->startx + game->floors[0]->rooms[0]->h/2;
     game->player->y = game->floors[0]->rooms[0]->starty + game->floors[0]->rooms[0]->w/2;
-
     activate_room(0, 0);
+}
+void init_game(WINDOW* main, char*_username, int scr){
+    username = _username;
+    setting = load_settings(username);
+    basic_colors[0] = red(), basic_colors[1] = yellow(), basic_colors[2] = blue();
 
-    draw_map(0);
+    //init
+    clear();
+    noecho();
+    curs_set(false);
+
+    if(scr == 0)
+        create_new_game();
+    else if(scr == 1)
+        game = load_game(username);
+
+
+    draw_map(game->cf);
     refresh();
 
     init_status_bar();
     handle_input();
 }
-
 void move_to_floor(int id){
     game->cf = id;
     update_status();
     activate_room(0, id);
     draw_map(id);
 }
-
 void draw_map(int id){
     clear();
     for(int i = 0; i < game->floors[id]->number_of_rooms; i++)
@@ -132,6 +149,10 @@ void handle_input(){
             draw_map(game->cf);
             continue;
         }
+
+        //clear button Status bar
+        clear_buttom_status_bar();
+
         if(valid(nx, ny) && game->floors[id]->map[nx][ny]->type != Nothing && game->floors[id]->map[nx][ny]->type != Wall
             && game->floors[id]->map[nx][ny]->type != Pillar){
             draw_item(x, y, game->floors[id]->map[x][y]->type);
@@ -155,12 +176,25 @@ void handle_input(){
             }
 
             // move to upstair
-            if(game->floors[id]->map[nx][ny]->type == StairUp){
+            if(game->floors[id]->map[nx][ny]->type == StairUp)
                 move_to_floor(game->cf+1);
-            }
-
-            if(game->floors[id]->map[nx][ny]->type == StairDown){
+            if(game->floors[id]->map[nx][ny]->type == StairDown)
                 move_to_floor(game->cf-1);
+            if(game->floors[id]->map[nx][ny]->type == Gold){
+                game->player->Golds += 1;
+                //remove gold from ground
+                game->floors[id]->map[nx][ny]->type = Floor;
+                update_status();
+                show_message("One Gold Reicieved");
+                                save_game(username, game);
+
+            }
+            if(game->floors[id]->map[nx][ny]->type == Black_Gold){
+                game->player->black_golds += 1;
+                //remove gold from ground
+                game->floors[id]->map[nx][ny]->type = Floor;
+                update_status();
+                show_message("One Black Gold Reicieved");
             }
         }
     }
@@ -219,6 +253,37 @@ void generate_pillar(int id){
                 return;
             }
         }
+    }
+}
+void generate_golds(int id){
+    for(int i = 0; i < game->floors[id]->number_of_rooms; i++){
+        int j = random_num(number_of_gold_min,number_of_gold_max);
+        while(j--){
+            while(1){
+                int x = rand() % (game->floors[id]->rooms[i]->h-4) + game->floors[id]->rooms[i]->startx + 2;
+                int y = rand() % (game->floors[id]->rooms[i]->w-4) + game->floors[id]->rooms[i]->starty + 2;
+                if(game->floors[id]->map[x][y]->type != Floor)
+                    continue;
+                game->floors[id]->map[x][y]->type = Gold;
+                break;
+            }
+        }
+    }
+}
+void generate_black_golds(int id){
+    for(int i = 0; i < game->floors[id]->number_of_rooms; i++){
+        int j = random_num(1,10);
+        if(j > black_gold_prob)
+            continue;
+        while(1){
+            int x = rand() % (game->floors[id]->rooms[i]->h-4) + game->floors[id]->rooms[i]->startx + 2;
+            int y = rand() % (game->floors[id]->rooms[i]->w-4) + game->floors[id]->rooms[i]->starty + 2;
+            if(game->floors[id]->map[x][y]->type != Floor)
+                continue;
+            game->floors[id]->map[x][y]->type = Black_Gold;
+            break;
+        }
+    
     }
 }
 void generate_traps(int id){

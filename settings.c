@@ -70,10 +70,6 @@ void settings_draw_main_screen(WINDOW* main, char* _username){
 
  int curr_btn = 0;
 
-// 0 -> create new game
-// 1 -> resume game
-// 2 -> settings
-// 3 - > scoreboard
 void settings_handle_input(){
     int active[btn_cnt];
     for(int i = 0; i < btn_cnt; i++)
