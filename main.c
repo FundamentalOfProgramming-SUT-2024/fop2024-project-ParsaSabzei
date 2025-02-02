@@ -4,6 +4,7 @@
 #include<stdlib.h>
 #include<string.h>
 #include<unistd.h>
+#include<pthread.h>
 
 //Unicode
 #include <wchar.h>
@@ -23,7 +24,6 @@
 #include "game.c"
 #include "settings.c"
 #include "scoreboard.c"
-
 
 int main(){
     //Enable emoji

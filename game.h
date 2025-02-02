@@ -4,8 +4,31 @@
 
 #define N 200
 
-int min_deamons = 2;
-int max_deamons = 6;
+const int inf = 1e9;
+
+
+int min_deamons = 1;
+int max_deamons = 3;
+
+int min_fire_breathing = 0;
+int max_fire_breathing = 2;
+
+int min_giant = 0;
+int max_giant = 2;
+
+int min_snake = 0;
+int max_snake = 1;
+
+int min_undeed = 0;
+int max_undeed = 1;
+
+int min_food = 1;
+int max_food = 3;
+
+int secs_to_hunger = 20;
+int secs_increase_heart = 10;
+
+int init_hunger = 5;
 
 #define weapon_page_size 20
 
@@ -65,12 +88,13 @@ enum type{
     StairUp,
     StairDown,
     Gold,
-    Black_Gold
+    Black_Gold,
+    Food
 };
 
 enum MonsterType{
     Deamon,
-    Fire_Breathing_Monster,
+    Fire_Breathing,
     Giant,
     Snake,
     Undeed
@@ -86,18 +110,22 @@ enum WeaponType{
     NoWeapon
 };
 
+
 int weapon_damage[] = {5, 12, 15, 5, 10, 0};
 char* weapon_name[] = {"Mace", "Dagger", "Magic_Wand", "Arrow", "Sword", "No weapon"};
 char* weapon_icon[] = {"⚒", "🗡️", "🪄", "🏹", "⚔️", "𝕏"};
 int weapon_count_per_collect[] = {1, 10, 8, 12, 1, 1};
 int monsters_health[] = {5, 10, 15, 20, 30};
 int monsters_damage[] = {1, 2, 3, 4, 6};
+char* monsters_name[] = {"Deamon Monster", "Fire breathing Monster", "Giant Monster", "Snake", "Undeed Monster"};
+int followings[] = {inf, inf, 3, inf, 5};
 
 typedef struct Weapon{
     enum WeaponType type; //new
     int count; //new
     int x,y; //New
     int active; //New
+    int following; //New
 } Weapon;
 
 typedef struct Monster{
@@ -126,6 +154,7 @@ typedef struct Player{
     int black_golds;
     int weapon;
     int dir; //New
+    int hunger; //New
 } Player;
 
 typedef struct Point{
@@ -167,6 +196,7 @@ Game* game;
 WINDOW* status_win;
 WINDOW* bag_win, *weapon_win; //New
 Settings setting;
+time_t last_time_attacked;
 
 char* GOLD_UNICODE = "\u2756";
 char* BLACK_GOLD_UNICODE = "\u25c8";
@@ -174,11 +204,11 @@ char* ARROW_UP_UNICODE = "\u2191";
 char* ARROW_DOWN_UNICODE = "\u2193";
 char* MAGIC_WAND_BULLET = "✹";
 char* ARROW_UNICODE = "⚆";
+char* FOOD_UNICODE = "🍖";
 
 int basic_colors[N];
-int dx[4] = {+1, 0, -1, 0}, dy[4] = {0, -1, 0, +1};
+int dx[] = {+1, 0, -1, 0, 0}, dy[] = {0, -1, 0, +1, 0};
 int dxx[8] = {+1, -1, 0, 0, +1, +1, -1, -1}, dyy[8] = {0, 0, +1, -1, +1, -1, +1, -1};
-int inf = 1e9;
 
 Room* create_room(int, int, int, int);
 void init_game(WINDOW*, char*, int);
@@ -203,6 +233,9 @@ void draw_room(Room*);
 void draw_stair_up(int, int);
 void draw_stair_down(int, int);
 void draw_deamon(int, int);
+void draw_undeed(int, int);
+void draw_fire_breathing(int, int);
+void draw_giant(int, int);
 void draw_weapons(int);
 int get_room_from_point(int, int, int);
 void activate_room(int, int);
@@ -212,12 +245,18 @@ void generate_traps(int);
 void generate_floor(int, int);
 void generate_stair_up(int);
 void generate_dagger(int);
+void generate_fire_breathing(int);
+void generate_demon(int);
+void generate_giant(int);
 void generate_golds(int);
 void generate_black_golds(int);
 void generate_deamon(int);
 void generate_magic_wand(int);
 void generate_sword(int);
 void generate_arrow(int);
+void generate_snake(int);
+void generate_undeed(int);
+void generate_food(int);
 void move_to_floor(int);
 void init_status_bar();
 void show_message(char*, char*);
@@ -232,6 +271,7 @@ void activate_weapon(int, int);
 void pick_weapon(int);
 void kill_monster(int, int);
 void remove_weapon(int, int);
+void enter_new_room(int, int);
 
 int is_monster_on(int id, int nx, int ny){
     for(int i = 0; i < game->floors[id]->monster_count; i++)
@@ -316,6 +356,24 @@ void draw_deamon(int i, int j){
     mvaddstr(i, j, "D");
     attroff(COLOR_PAIR(basic_colors[0]));
 }
+void draw_undeed(int i, int j){
+    attron(COLOR_PAIR(7));
+    mvaddstr(i, j, "U");
+    attroff(COLOR_PAIR(7));
+}
+void draw_fire_breathing(int i, int j){
+    attron(COLOR_PAIR(basic_colors[1]));
+    mvaddstr(i, j, "F");
+    attroff(COLOR_PAIR(basic_colors[1]));
+}
+void draw_giant(int i, int j){
+    attron(COLOR_PAIR(basic_colors[2]));
+    mvaddstr(i, j, "G");
+    attroff(COLOR_PAIR(basic_colors[2]));
+}
+void draw_snake(int i, int j){
+    mvaddstr(i, j, "S");
+}
 void draw_black_gold(int i, int j){
     attron(COLOR_PAIR(BLACK_GOLD_COLOR) | A_BLINK);
     mvaddstr(i, j, BLACK_GOLD_UNICODE);
@@ -330,6 +388,9 @@ void draw_stair_down(int i, int j){
     attron(COLOR_PAIR(STAIR_COLOR));
     mvprintw(i, j, "%s",ARROW_DOWN_UNICODE);
     attroff(COLOR_PAIR(STAIR_COLOR));    
+}
+void draw_food(int i, int j){
+    mvprintw(i, j, "%s", FOOD_UNICODE);
 }
 void draw_item(int i, int j, enum type tp){
     switch(tp){
@@ -361,6 +422,9 @@ void draw_item(int i, int j, enum type tp){
             break;
         case Black_Gold:
             draw_black_gold(i, j);
+            break;
+        case Food:
+            draw_food(i, j);
             break;
     }
 }
