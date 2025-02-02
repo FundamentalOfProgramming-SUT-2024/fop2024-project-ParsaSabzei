@@ -4,7 +4,7 @@
 
 #define maxbuf (int)1e4
 const char* users_file_path = "storage/user.csv";
-const char* player_info_path = "storage/player_info/";
+ char* player_info_path = "storage/player_info/";
 
 int user_exists(char*);
 void save_user(char*, char*, char*, char*);

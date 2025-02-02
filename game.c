@@ -5,6 +5,8 @@ char *username;
 
 
 void update_status(){
+    for(int i = 0; i < COLS; i++)
+        mvwprintw(status_win, 1, i, " ");
     box(status_win, 0, 0);
     mvwprintw(status_win, 1, 2, "Floor: %d", game->cf + 1);
 
@@ -16,6 +18,18 @@ void update_status(){
     mvwprintw(status_win, 1, 30, "%s: %d", BLACK_GOLD_UNICODE, game->player->black_golds);
     wattroff(status_win, COLOR_PAIR(BLACK_GOLD_COLOR));
 
+
+
+        mvwprintw(status_win, 1, 38, "Weapon:%s", weapon_icon[game->player->weapon]);
+
+    //Printing player's health
+    // COLS - 25 + 4 * i
+    int last = 0;
+    for(int i = 0; i < game->player->health / 2; i++)
+        mvwprintw(status_win, 1, COLS - 25 + 4 * i, "❤️"), last = i;
+    if(game->player->health&1)
+        mvwprintw(status_win, 1, COLS - 25 + (last + 1) * 4, "💔");
+    
     wrefresh(status_win);
     refresh();
 }
@@ -23,7 +37,10 @@ void init_status_bar(){
     status_win = newwin(3, COLS - 2, 0, 0);
     update_status();
 }
+
 void generate_floor(int id, int stair_room){
+    game->floors[id]->weapon_count = 0;
+    game->floors[id]->monster_count = 0;
     for(int i = 0; i < N; i++)
         for(int j = 0; j < N; j++){
             game->floors[id]->map[i][j] = (Point*)malloc(sizeof(Point));
@@ -44,17 +61,30 @@ void generate_floor(int id, int stair_room){
     }
     generate_golds(id);
     generate_black_golds(id);
+    generate_deamon(id);
+    generate_dagger(id);
     if(id != game->floor_count - 1)
        generate_stair_up(id); 
 }
 void create_new_game(){
     game = (Game*)malloc(sizeof(Game));
     game->player = (Player*)malloc(sizeof(Player));
+    game->bag = (Bag*)malloc(sizeof(Bag));
     game->floor_count = random_num(MIN_NUMBER_OF_FLOORS, MAX_NUMBER_OF_FLOORS);
-
     game->floors = (Tabaghe**)malloc(sizeof(Tabaghe*) * game->floor_count);
     for(int i = 0; i < game->floor_count; i++)
         game->floors[i] = (Tabaghe*)malloc(sizeof(Tabaghe));
+
+
+    for(int i = 0; i < WEAPON_TYPES; i++){
+        Weapon* wep = malloc(sizeof(Weapon));
+        wep->type = i;
+        wep->count = 0;
+        if(i == 0)
+            wep->count = 1;
+        game->bag->weapons[i] = wep;
+    }
+
 
     game->cf = 0;
     game->ignore_hiding = 0;
@@ -71,15 +101,17 @@ void create_new_game(){
     //initing player
     game->player->Golds = 0;
     game->player->black_golds = 0;
-    game->player->health = 0;
+    game->player->health = 10;
     game->player->x = game->floors[0]->rooms[0]->startx + game->floors[0]->rooms[0]->h/2;
     game->player->y = game->floors[0]->rooms[0]->starty + game->floors[0]->rooms[0]->w/2;
+    game->player->weapon = 0;
     activate_room(0, 0);
+    activate_monster(0, 0);
 }
 void init_game(WINDOW* main, char*_username, int scr){
     username = _username;
     setting = load_settings(username);
-    basic_colors[0] = red(), basic_colors[1] = yellow(), basic_colors[2] = blue();
+    basic_colors[0] = red(), basic_colors[1] = yellow(), basic_colors[2] = blue(), basic_colors[3] = green();
 
     //init
     clear();
@@ -91,6 +123,9 @@ void init_game(WINDOW* main, char*_username, int scr){
     else if(scr == 1)
         game = load_game(username);
 
+    //init bag and weapon page
+    bag_win = newwin(LINES - 10, COLS - 20, 5, 10);
+    weapon_win = newwin(weapon_page_size, weapon_page_size * 2, (LINES - weapon_page_size)/2, COLS/2 - weapon_page_size);
 
     draw_map(game->cf);
     refresh();
@@ -103,6 +138,25 @@ void move_to_floor(int id){
     update_status();
     activate_room(0, id);
     draw_map(id);
+}
+void draw_monsters(int id){
+    for(int i = 0; i < game->floors[id]->monster_count; i++){
+        if(game->floors[id]->monsters[i]->active == 0 && !game->ignore_hiding)
+            continue;
+        switch(game->floors[id]->monsters[i]->type){
+            case Deamon:
+                draw_deamon(game->floors[id]->monsters[i]->x, game->floors[id]->monsters[i]->y);
+                break;
+        }
+    }
+}
+void draw_weapons(int id){
+    for(int i = 0; i < game->floors[id]->weapon_count; i++){
+        if(game->floors[id]->weapons_on_ground[i]->active == 0 && !game->ignore_hiding)
+            continue;
+        mvprintw(game->floors[id]->weapons_on_ground[i]->x, game->floors[id]->weapons_on_ground[i]->y,
+            "%s", weapon_icon[game->floors[id]->weapons_on_ground[i]->type]);
+    }
 }
 void draw_map(int id){
     clear();
@@ -117,8 +171,122 @@ void draw_map(int id){
             refresh();
         }
     draw_player();
+    draw_monsters(id);
+    draw_weapons(id);
     update_status();
     refresh();
+}
+void attack(){
+    if(game->player->weapon == Mace){
+        int x = game->player->x, y = game->player->y;
+        show_message("Attack with Mace!");
+        for(int i = 0; i < 8; i++){
+            int nx = x + dxx[i], ny = y + dyy[i];
+            attron(A_DIM);
+            draw_item(nx, ny, game->floors[game->cf]->map[nx][ny]->type);
+            refresh();
+            usleep(60000);
+
+            int killed = -1;
+
+            for(int i = 0; i < game->floors[game->cf]->monster_count; i++){
+                if(game->floors[game->cf]->monsters[i]->x != nx || game->floors[game->cf]->monsters[i]->y != ny)
+                    continue;
+                if(game->floors[game->cf]->monsters[i]->health <= weapon_damage[Mace])
+                    killed = i;
+                else
+                    game->floors[game->cf]->monsters[i]->health -= weapon_damage[Mace];
+            }
+            if(killed != -1)
+                kill_monster(game->cf, killed);
+            attroff(A_DIM);
+
+            draw_item(nx, ny, game->floors[game->cf]->map[nx][ny]->type);
+        }
+    }
+}
+void move_monsters(int id, int nx, int ny, int room){
+    for(int i = 0; i < game->floors[id]->monster_count; i++){
+        if(get_monster_room(i, id) == room){
+
+            int x = game->floors[id]->monsters[i]->x;
+            int y = game->floors[id]->monsters[i]->y;
+
+            int ans = dist(nx, ny, x, y), bestdir = -1;
+            for(int j = 0; j < 4; j++){
+                int mnsx = x + dx[j];
+                int mnsy = y + dy[j];
+                if(!valid(mnsx, mnsy) || game->floors[id]->map[mnsx][mnsy]->type == Wall 
+                    || game->floors[id]->map[mnsx][mnsy]->type == Door
+                    || game->floors[id]->map[mnsx][mnsy]->type == Pillar
+                    || is_monster_on(id, mnsx, mnsy)
+                    || (nx == mnsx && ny == mnsy))
+                    continue;
+                if(dist(nx, ny, mnsx, mnsy) < ans)
+                    ans = dist(nx, ny, mnsx, mnsy), bestdir = j;
+            }
+            if(bestdir == -1)
+                continue;
+            int mnsx = x + dx[bestdir];
+            int mnsy = y + dy[bestdir];
+            if(dist(mnsx, mnsy, nx, ny) == 1){
+                game->player->health -= monsters_damage[game->floors[id]->monsters[i]->type];
+                update_status();
+
+                if(game->floors[id]->monsters[i]->type == Deamon){
+                    show_message("You've been attacked by a Deamon!");
+                }
+            }
+            draw_item(x, y, game->floors[id]->map[x][y]->type);
+            game->floors[id]->monsters[i]->x = mnsx;
+            game->floors[id]->monsters[i]->y = mnsy;
+            draw_monsters(id);
+        }
+    }
+}
+void show_bag(){
+    box(bag_win, 0, 0);
+    mvwprintw(bag_win, 1, 3, "Weapons:");
+
+    for(int i = 0; i < WEAPON_TYPES; i++){
+        mvwprintw(bag_win, 2*i + 3, 3, "%s(%s ): %d", weapon_name[i], weapon_icon[i], game->bag->weapons[i]->count);
+    }
+    wrefresh(bag_win);
+    refresh();
+    while(getch() != 'r');
+}
+void show_weapons_page(){
+    box(weapon_win, 0, 0);
+    for(int i = 0; i < WEAPON_TYPES; i++){
+        if(i == game->player->weapon){
+            wattron(weapon_win, COLOR_PAIR(basic_colors[3]));
+            mvwprintw(weapon_win, 2*i + 3, 3, "%s(%s ): %d", weapon_name[i], weapon_icon[i], game->bag->weapons[i]->count);
+            wattroff(weapon_win, COLOR_PAIR(basic_colors[3]));
+        }
+        else{
+            if(game->bag->weapons[i]->count)
+                mvwprintw(weapon_win, 2*i + 3, 3, "%s(%s ): %d    Press %d to select", weapon_name[i], weapon_icon[i], game->bag->weapons[i]->count, i + 1);
+            else
+                mvwprintw(weapon_win, 2*i + 3, 3, "%s(%s ): %d", weapon_name[i], weapon_icon[i], game->bag->weapons[i]->count);
+        }
+    }
+
+    mvwprintw(weapon_win, 2*WEAPON_TYPES + 6, 3, "Press Y to deselect current weapon");
+    wrefresh(weapon_win);
+    refresh();
+    while(1){
+        int c = getch();
+        if(c == 'y'){
+            game->player->weapon = NoWeapon;
+            break;
+        }else if(c == 'i')
+            break;
+        int num = c - '0';
+        if(num > WEAPON_TYPES || num < 1)
+            continue;
+        game->player->weapon = num - 1;
+        break;
+    }
 }
 void handle_input(){
     while(true){
@@ -127,7 +295,6 @@ void handle_input(){
         int nx = x, ny = y;
 
         int id = game->cf;
-
         if(ch == 'w'){
             nx--;
         }else if(ch == 's'){
@@ -148,13 +315,33 @@ void handle_input(){
             game->ignore_hiding ^= 1;
             draw_map(game->cf);
             continue;
-        }
+        }else if(ch == 32){ //Space Key
+            attack();
+            continue;
+        }else if(ch == 'r'){ //open bag
+            show_bag();
+            draw_map(id);
+            continue;
+        }else if(ch == 'i'){ //open weapons page
+            show_weapons_page();
+            draw_map(id);
+            continue;
+        }else
+            continue;
 
         //clear button Status bar
         clear_buttom_status_bar();
 
         if(valid(nx, ny) && game->floors[id]->map[nx][ny]->type != Nothing && game->floors[id]->map[nx][ny]->type != Wall
             && game->floors[id]->map[nx][ny]->type != Pillar){
+
+            //Preventing move through a monster
+            if(is_monster_on(id, nx, ny))
+                continue;  
+            if(is_weapon_on(id, nx, ny)){
+                
+            }
+
             draw_item(x, y, game->floors[id]->map[x][y]->type);
             game->player->y = ny;
             game->player->x = nx;
@@ -162,6 +349,9 @@ void handle_input(){
 
             //Update visibility
             int current_room = get_room_from_point(nx, ny, id);
+
+            move_monsters(id, nx, ny, current_room);
+
             if(current_room != EOF && game->floors[id]->rooms[current_room]->discovered == 0){
                 activate_room(current_room, id);
                 draw_map(id);
@@ -173,6 +363,9 @@ void handle_input(){
             if(game->floors[id]->map[nx][ny]->type == Trap){
                 //Trap activated
                 game->floors[id]->map[nx][ny]->activated = 1;
+                game->player->health -= 1;
+                show_message("Ooch! That was a trap");
+                update_status();
             }
 
             // move to upstair
@@ -186,8 +379,6 @@ void handle_input(){
                 game->floors[id]->map[nx][ny]->type = Floor;
                 update_status();
                 show_message("One Gold Reicieved");
-                                save_game(username, game);
-
             }
             if(game->floors[id]->map[nx][ny]->type == Black_Gold){
                 game->player->black_golds += 1;
@@ -197,6 +388,28 @@ void handle_input(){
                 show_message("One Black Gold Reicieved");
             }
         }
+    }
+}
+void generate_dagger(int id){
+    for(int i = 0; i < game->floors[id]->number_of_rooms; i++){
+        int j = random_num(1,10);
+        if(j > DAGGER_PROB)
+            continue;
+        while(1){
+            int x = rand() % (game->floors[id]->rooms[i]->h-4) + game->floors[id]->rooms[i]->startx + 2;
+            int y = rand() % (game->floors[id]->rooms[i]->w-4) + game->floors[id]->rooms[i]->starty + 2;
+            if(game->floors[id]->map[x][y]->type != Floor)
+                continue;
+            Weapon *wep = malloc(sizeof(Weapon));
+            wep->count = weapon_count_per_collect[Dagger];
+            wep->type = Dagger;
+            wep->x = x, wep->y = y;
+            wep->active = 0;
+            game->floors[id]->weapons_on_ground[game->floors[id]->weapon_count++] = wep;
+            printw("%d", game->floors[id]->weapon_count);
+            break;
+        }
+    
     }
 }
 void generate_rooms(int id, int stair_room){
@@ -265,6 +478,28 @@ void generate_golds(int id){
                 if(game->floors[id]->map[x][y]->type != Floor)
                     continue;
                 game->floors[id]->map[x][y]->type = Gold;
+                break;
+            }
+        }
+    }
+}
+void generate_deamon(int id){
+    for(int i = 0; i < game->floors[id]->number_of_rooms; i++){
+        int j = random_num(min_deamons,max_deamons);
+        while(j--){
+            while(1){
+                int x = rand() % (game->floors[id]->rooms[i]->h-4) + game->floors[id]->rooms[i]->startx + 2;
+                int y = rand() % (game->floors[id]->rooms[i]->w-4) + game->floors[id]->rooms[i]->starty + 2;
+                if(game->floors[id]->map[x][y]->type != Floor)
+                    continue;
+                Monster* monster = malloc(sizeof(Monster));
+                monster->active = 0;
+                monster->following = 0;
+                monster->health = monsters_health[Deamon];
+                monster->type = Deamon;
+                monster->x = x;
+                monster->y = y;
+                game->floors[id]->monsters[game->floors[id]->monster_count++] = monster;
                 break;
             }
         }

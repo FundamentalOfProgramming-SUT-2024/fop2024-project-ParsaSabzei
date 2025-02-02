@@ -1,12 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <curses.h>
-#include <locale.h>
-#include <ctype.h>
-#include <time.h>
-#include <unistd.h>
+
 
 #define MAXRNDSET 200
 
@@ -77,24 +69,15 @@ int randper()
 int do_art()
 {
 	int ch, i, x, y, o, n, b, done;
-	int set[MAXRNDSET];
-	SCREEN* out_screen;
-	
+	int set[MAXRNDSET];	
 	FILE *f = fopen("asset/art.txt", "r");
 	int status = 0;
 	char lin[256];
 
-
-	srand(time(NULL));
-	setlocale(LC_ALL, "");
     initscr();
 
-	cbreak();
 	noecho();
 	nodelay(stdscr, TRUE);
-	nonl();
-	intrflush(stdscr, FALSE);
-	keypad(stdscr, TRUE);
 
 	// check that it is sane
 	rows = LINES - 1;
@@ -144,13 +127,6 @@ int do_art()
 		refresh();
 	
 		if (i < 5) {
-
-			if ((i & 1) == 0)	
-				standout();
-
-			if ((i & 1) == 0)	
-				standend();
-
 			refresh();
 			usleep(200000);
 		}
@@ -204,17 +180,7 @@ int do_art()
 			}
 		}
 
-		doupdate();
 		usleep(30000);
-		
-		if (b < 10) {
-			standout();
-		}
-			
-
-		if (b < 10) {
-			standend();
-		}
 
 		refresh();
 		
@@ -222,9 +188,6 @@ int do_art()
 		if (b == 20)
 			b = 0;
 	}
-	standout();
-
-	standend();
 	refresh();	
 	
 	usleep(40000);
@@ -235,4 +198,6 @@ int do_art()
 		free(enc);
 	if (per != NULL)
 		free(per);
+	nodelay(stdscr, FALSE);
+	endwin();
 }

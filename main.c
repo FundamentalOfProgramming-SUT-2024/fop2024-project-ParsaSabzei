@@ -3,6 +3,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<unistd.h>
 
 //Unicode
 #include <wchar.h>
@@ -11,6 +12,7 @@
 //time
 #include<time.h>
 
+#include "effect.c"
 #include "file_manager.c"
 #include "input.c"
 #include "utils.h"
@@ -21,21 +23,19 @@
 #include "game.c"
 #include "settings.c"
 #include "scoreboard.c"
-#include "effect.c"
 
 
 int main(){
     //Enable emoji
     setlocale(LC_ALL, "");
-    
+
     //init
     srand(time(0));
 
-    do_art();
+   // do_art();
     clear();
     
     WINDOW* mn = initscr();
-
     if(!st_color()){
         endwin();
         printf("Color doesn't supported");

@@ -11,6 +11,7 @@
 #define STAIR_COLOR 20
 #define BLACK_GOLD_COLOR 21
 
+int start = 70;
 int is_dig(char ch){
     return (ch >= '0' && ch <= '9');
 }
@@ -113,20 +114,26 @@ void random_color(){
     }
 }
 int red(){
-    int i = rand() % 50 + 100;
+    int i = start++;
     init_color(i, 1000, 0, 0);
     init_pair(i, i, 0);
     return i;
 }
 int blue(){
-    int i = rand() % 50 + 100;
+    int i = start++;
     init_color(i, 0, 0, 1000);
     init_pair(i, i, 0);
     return i;
 }
 int yellow(){
-    int i = rand() % 50 + 100;
+    int i = start++;
     init_color(i, 1000, 1000, 0);
+    init_pair(i, i, 0);
+    return i;
+}
+int green(){
+    int i = start++;
+    init_color(i, 0, 1000, 0);
     init_pair(i, i, 0);
     return i;
 }

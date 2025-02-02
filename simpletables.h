@@ -178,7 +178,7 @@ void st_print_header_styled(st_table *table, st_style *style) {
     printw("%s", column);
     if (style->bold_header) attroff(A_BOLD);
     free(column);
-    printw(style->svl);
+    printw("%s", style->svl);
   }
   printw("\n");
 
@@ -216,7 +216,7 @@ void st_print_row_styled(st_table *table, int row, st_style *style) {
     else if(row == 2)
       attroff(COLOR_PAIR(blue()));
     free(column);
-    printw(style->svl);
+    printw("%s", style->svl);
   }
   printw("\n");
 }
