@@ -12,6 +12,15 @@ int max_deamons = 6;
 //x in 10
 #define DAGGER_PROB 5
 
+//x in 100
+#define SWORD_PROB 10
+
+//x in 100
+#define ARROW_PROB 20
+
+//x in 100  
+#define MAGIC_WAND_PROB 10
+
 #define MIN_NUMBER_OF_FLOORS 4
 #define MAX_NUMBER_OF_FLOORS 5
 
@@ -79,8 +88,8 @@ enum WeaponType{
 
 int weapon_damage[] = {5, 12, 15, 5, 10, 0};
 char* weapon_name[] = {"Mace", "Dagger", "Magic_Wand", "Arrow", "Sword", "No weapon"};
-char* weapon_icon[] = {"⚒", "🗡️", "", "", "", "𝕏"};
-int weapon_count_per_collect[] = {10, 8, 20, 1, 0};
+char* weapon_icon[] = {"⚒", "🗡️", "🪄", "🏹", "⚔️", "𝕏"};
+int weapon_count_per_collect[] = {1, 10, 8, 12, 1, 1};
 int monsters_health[] = {5, 10, 15, 20, 30};
 int monsters_damage[] = {1, 2, 3, 4, 6};
 
@@ -116,6 +125,7 @@ typedef struct Player{
     int Golds;
     int black_golds;
     int weapon;
+    int dir; //New
 } Player;
 
 typedef struct Point{
@@ -146,7 +156,8 @@ typedef struct Game{
     int cf; // current floor
     Tabaghe** floors;
     Player* player;
-    bool ignore_hiding;
+    int ignore_hiding;
+    int ignore_picking;
     Bag* bag; //New
 } Game;
 
@@ -157,13 +168,15 @@ WINDOW* status_win;
 WINDOW* bag_win, *weapon_win; //New
 Settings setting;
 
-const char* GOLD_UNICODE = "\u2756";
-const char* BLACK_GOLD_UNICODE = "\u25c8";
-const char* ARROW_UP_UNICODE = "\u2191";
-const char* ARROW_DOWN_UNICODE = "\u2193";
+char* GOLD_UNICODE = "\u2756";
+char* BLACK_GOLD_UNICODE = "\u25c8";
+char* ARROW_UP_UNICODE = "\u2191";
+char* ARROW_DOWN_UNICODE = "\u2193";
+char* MAGIC_WAND_BULLET = "✹";
+char* ARROW_UNICODE = "⚆";
 
 int basic_colors[N];
-int dx[4] = {+1, -1, 0, 0}, dy[4] = {0, 0, +1, -1};
+int dx[4] = {+1, 0, -1, 0}, dy[4] = {0, -1, 0, +1};
 int dxx[8] = {+1, -1, 0, 0, +1, +1, -1, -1}, dyy[8] = {0, 0, +1, -1, +1, -1, +1, -1};
 int inf = 1e9;
 
@@ -202,9 +215,12 @@ void generate_dagger(int);
 void generate_golds(int);
 void generate_black_golds(int);
 void generate_deamon(int);
+void generate_magic_wand(int);
+void generate_sword(int);
+void generate_arrow(int);
 void move_to_floor(int);
 void init_status_bar();
-void show_message(char* msg);
+void show_message(char*, char*);
 void clear_buttom_status_bar();
 void draw_monsters(int);
 int is_monster_on(int, int, int);
@@ -213,18 +229,21 @@ void show_bag();
 void show_weapons_page();
 void activate_monster(int, int);
 void activate_weapon(int, int);
+void pick_weapon(int);
+void kill_monster(int, int);
+void remove_weapon(int, int);
 
 int is_monster_on(int id, int nx, int ny){
     for(int i = 0; i < game->floors[id]->monster_count; i++)
         if(game->floors[id]->monsters[i]->x == nx && game->floors[id]->monsters[i]->y == ny)
-            return 1;
-    return 0;
+            return i;
+    return -1;
 }
 int is_weapon_on(int id, int nx, int ny){
     for(int i = 0; i < game->floors[id]->weapon_count; i++)
         if(game->floors[id]->weapons_on_ground[i]->x == nx && game->floors[id]->weapons_on_ground[i]->y == ny)
-            return 1;
-    return 0;
+            return i;
+    return -1;
 }
 Pair find_in_room(int room_id, int floor_id, enum type tp){
     int sx = game->floors[floor_id]->rooms[room_id]->startx, ex = game->floors[floor_id]->rooms[room_id]->h;
@@ -415,19 +434,33 @@ void activate_corridor(int x, int y, int id){
             if(game->floors[id]->map[i][j]->type == Corridor && dist(x, y, i, j) <= HOW_FAR_SEE)
                 game->floors[id]->map[i][j]->discovered = 1;
 }
-void show_message(char*msg){
+void show_message(char*msg, char*emj){
     clear_buttom_status_bar();
     attron(A_ITALIC);
-    mvprintw(LINES - 1, (COLS - strlen(msg))/2, "%s", msg);
+    mvprintw(LINES - 1, (COLS - strlen(msg))/2, "%s %s", msg, emj);
     attroff(A_ITALIC);
 
 }
 void kill_monster(int id, int ind){
     int x = game->floors[id]->monsters[ind]->x, y = game->floors[id]->monsters[ind]->y;
+
+    //redraw the position
+    draw_item(x, y, game->floors[game->cf]->map[x][y]->type);
+
+    // If a weapon was in (nx, ny) redraw it
+    draw_weapons(game->cf);
+
     for(int i = ind + 1; i < game->floors[id]->monster_count; i++)
         game->floors[id]->monsters[i - 1] = game->floors[id]->monsters[i];
     game->floors[id]->monster_count--;
-    
+
+}
+//Remove indth weapon on ground on the idth floor
+void remove_weapon(int id, int ind){
+    int x = game->floors[id]->weapons_on_ground[ind]->x, y = game->floors[id]->weapons_on_ground[ind]->y;
+    for(int i = ind + 1; i < game->floors[id]->weapon_count; i++)
+        game->floors[id]->weapons_on_ground[i - 1] = game->floors[id]->weapons_on_ground[i];
+    game->floors[id]->weapon_count--;
 }
 void clear_buttom_status_bar(){
     for(int i = 0; i < COLS; i++)

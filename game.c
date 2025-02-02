@@ -18,9 +18,14 @@ void update_status(){
     mvwprintw(status_win, 1, 30, "%s: %d", BLACK_GOLD_UNICODE, game->player->black_golds);
     wattroff(status_win, COLOR_PAIR(BLACK_GOLD_COLOR));
 
+        
+    mvwprintw(status_win, 1, 38, "Weapon:%s", weapon_icon[game->player->weapon]);
 
-
-        mvwprintw(status_win, 1, 38, "Weapon:%s", weapon_icon[game->player->weapon]);
+    if(game->ignore_picking){
+        wattron(status_win, COLOR_PAIR(basic_colors[0]));
+        mvwprintw(status_win, 1, 50, "X");
+        wattroff(status_win, COLOR_PAIR(basic_colors[0]));
+    }
 
     //Printing player's health
     // COLS - 25 + 4 * i
@@ -37,7 +42,6 @@ void init_status_bar(){
     status_win = newwin(3, COLS - 2, 0, 0);
     update_status();
 }
-
 void generate_floor(int id, int stair_room){
     game->floors[id]->weapon_count = 0;
     game->floors[id]->monster_count = 0;
@@ -63,6 +67,9 @@ void generate_floor(int id, int stair_room){
     generate_black_golds(id);
     generate_deamon(id);
     generate_dagger(id);
+    generate_magic_wand(id);
+    generate_sword(id);
+    generate_arrow(id);
     if(id != game->floor_count - 1)
        generate_stair_up(id); 
 }
@@ -88,6 +95,7 @@ void create_new_game(){
 
     game->cf = 0;
     game->ignore_hiding = 0;
+    game->ignore_picking = 0;
 
     generate_floor(0, -1);
     for(int i = 1; i < game->floor_count; i++){
@@ -105,6 +113,7 @@ void create_new_game(){
     game->player->x = game->floors[0]->rooms[0]->startx + game->floors[0]->rooms[0]->h/2;
     game->player->y = game->floors[0]->rooms[0]->starty + game->floors[0]->rooms[0]->w/2;
     game->player->weapon = 0;
+    game->player->dir = 0;
     activate_room(0, 0);
     activate_monster(0, 0);
 }
@@ -179,14 +188,9 @@ void draw_map(int id){
 void attack(){
     if(game->player->weapon == Mace){
         int x = game->player->x, y = game->player->y;
-        show_message("Attack with Mace!");
+        show_message("Attack with Mace!", weapon_icon[Mace]);
         for(int i = 0; i < 8; i++){
             int nx = x + dxx[i], ny = y + dyy[i];
-            attron(A_DIM);
-            draw_item(nx, ny, game->floors[game->cf]->map[nx][ny]->type);
-            refresh();
-            usleep(60000);
-
             int killed = -1;
 
             for(int i = 0; i < game->floors[game->cf]->monster_count; i++){
@@ -199,9 +203,152 @@ void attack(){
             }
             if(killed != -1)
                 kill_monster(game->cf, killed);
-            attroff(A_DIM);
+
+            if(game->floors[game->cf]->map[nx][ny]->type == Floor && is_weapon_on(game->cf, nx, ny) == -1){
+                attron(A_DIM);
+                draw_item(nx, ny, game->floors[game->cf]->map[nx][ny]->type);
+                refresh();
+                usleep(60000);
+                attroff(A_DIM);
+
+                draw_item(nx, ny, game->floors[game->cf]->map[nx][ny]->type);
+            }
+        }
+    }
+    else if(game->player->weapon == Dagger){
+        game->bag->weapons[Dagger]->count--;
+
+        int x = game->player->x, y = game->player->y;
+        show_message("Attack with Dagger!", weapon_icon[Dagger]);
+        int nx = x, ny = y;
+        for(int i = 0; i < 5; i++){
+            nx += dx[game->player->dir], ny += dy[game->player->dir];
+            int killed = is_monster_on(game->cf, nx, ny);
+            if(killed != -1 && game->floors[game->cf]->monsters[killed]->health  > weapon_damage[Dagger]){
+                game->floors[game->cf]->monsters[killed]->health -= weapon_damage[Dagger];
+                killed = -1;
+            }
+
+            if(killed != -1){
+                kill_monster(game->cf, killed);
+                break;
+            }
+
+            //The dagger hit obstacle
+            if(game->floors[game->cf]->map[nx][ny]->type == Pillar ||
+                game->floors[game->cf]->map[nx][ny]->type == Wall ||
+                game->floors[game->cf]->map[nx][ny]->type == Corridor ||
+                game->floors[game->cf]->map[nx][ny]->type == Door)
+                    break;
+
+            mvprintw(nx, ny, "%s",weapon_icon[Dagger]);
+            refresh();
+            usleep(60000);
 
             draw_item(nx, ny, game->floors[game->cf]->map[nx][ny]->type);
+
+            // If a weapon was in (nx, ny) redraw it
+            draw_weapons(game->cf);
+        }
+    }
+    else if(game->player->weapon == Magic_Wand){
+        game->bag->weapons[Magic_Wand]->count--;
+
+        int x = game->player->x, y = game->player->y;
+        show_message("Attack with Magic Wand!", weapon_icon[Magic_Wand]);
+        int nx = x, ny = y;
+        for(int i = 0; i < 10; i++){
+            nx += dx[game->player->dir], ny += dy[game->player->dir];
+            int killed = is_monster_on(game->cf, nx, ny);
+            if(killed != -1 && game->floors[game->cf]->monsters[killed]->health  > weapon_damage[Magic_Wand]){
+                game->floors[game->cf]->monsters[killed]->health -= weapon_damage[Magic_Wand];
+                killed = -1;
+            }
+
+            if(killed != -1){
+                kill_monster(game->cf, killed);
+                break;
+            }
+
+            //The Magic Wand hit obstacle
+            if(game->floors[game->cf]->map[nx][ny]->type == Pillar ||
+                game->floors[game->cf]->map[nx][ny]->type == Wall ||
+                game->floors[game->cf]->map[nx][ny]->type == Corridor ||
+                game->floors[game->cf]->map[nx][ny]->type == Door)
+                    break;
+
+            mvprintw(nx, ny, "%s", MAGIC_WAND_BULLET);
+            refresh();
+            usleep(60000);
+
+            draw_item(nx, ny, game->floors[game->cf]->map[nx][ny]->type);
+
+            // If a weapon was in (nx, ny) redraw it
+            draw_weapons(game->cf);
+        }
+    }else if(game->player->weapon == Sword){
+        int x = game->player->x, y = game->player->y;
+        show_message("Attack with Sword!", weapon_icon[Sword]);
+        for(int i = 0; i < 8; i++){
+            int nx = x + dxx[i], ny = y + dyy[i];
+            int killed = -1;
+
+            for(int i = 0; i < game->floors[game->cf]->monster_count; i++){
+                if(game->floors[game->cf]->monsters[i]->x != nx || game->floors[game->cf]->monsters[i]->y != ny)
+                    continue;
+                if(game->floors[game->cf]->monsters[i]->health <= weapon_damage[Sword])
+                    killed = i;
+                else
+                    game->floors[game->cf]->monsters[i]->health -= weapon_damage[Sword];
+            }
+            if(killed != -1)
+                kill_monster(game->cf, killed);
+
+            if(game->floors[game->cf]->map[nx][ny]->type == Floor && is_weapon_on(game->cf, nx, ny) == -1){
+                attron(A_DIM);
+                draw_item(nx, ny, game->floors[game->cf]->map[nx][ny]->type);
+                refresh();
+                usleep(60000);
+                attroff(A_DIM);
+
+                draw_item(nx, ny, game->floors[game->cf]->map[nx][ny]->type);
+            }
+        }
+    }
+    else if(game->player->weapon == Arrow){
+        game->bag->weapons[Arrow]->count--;
+
+        int x = game->player->x, y = game->player->y;
+        show_message("Attack with Arrow!", weapon_icon[Arrow]);
+        int nx = x, ny = y;
+        for(int i = 0; i < 5; i++){
+            nx += dx[game->player->dir], ny += dy[game->player->dir];
+            int killed = is_monster_on(game->cf, nx, ny);
+            if(killed != -1 && game->floors[game->cf]->monsters[killed]->health  > weapon_damage[Arrow]){
+                game->floors[game->cf]->monsters[killed]->health -= weapon_damage[Arrow];
+                killed = -1;
+            }
+
+            if(killed != -1){
+                kill_monster(game->cf, killed);
+                break;
+            }
+
+            //The dagger hit obstacle
+            if(game->floors[game->cf]->map[nx][ny]->type == Pillar ||
+                game->floors[game->cf]->map[nx][ny]->type == Wall ||
+                game->floors[game->cf]->map[nx][ny]->type == Corridor ||
+                game->floors[game->cf]->map[nx][ny]->type == Door)
+                    break;
+
+            mvprintw(nx, ny, "%s", ARROW_UNICODE);
+            refresh();
+            usleep(60000);
+
+            draw_item(nx, ny, game->floors[game->cf]->map[nx][ny]->type);
+
+            // If a weapon was in (nx, ny) redraw it
+            draw_weapons(game->cf);
         }
     }
 }
@@ -219,7 +366,7 @@ void move_monsters(int id, int nx, int ny, int room){
                 if(!valid(mnsx, mnsy) || game->floors[id]->map[mnsx][mnsy]->type == Wall 
                     || game->floors[id]->map[mnsx][mnsy]->type == Door
                     || game->floors[id]->map[mnsx][mnsy]->type == Pillar
-                    || is_monster_on(id, mnsx, mnsy)
+                    || is_monster_on(id, mnsx, mnsy) != -1
                     || (nx == mnsx && ny == mnsy))
                     continue;
                 if(dist(nx, ny, mnsx, mnsy) < ans)
@@ -234,13 +381,14 @@ void move_monsters(int id, int nx, int ny, int room){
                 update_status();
 
                 if(game->floors[id]->monsters[i]->type == Deamon){
-                    show_message("You've been attacked by a Deamon!");
+                    show_message("You've been attacked by a Deamon!", "");
                 }
             }
             draw_item(x, y, game->floors[id]->map[x][y]->type);
             game->floors[id]->monsters[i]->x = mnsx;
             game->floors[id]->monsters[i]->y = mnsy;
             draw_monsters(id);
+            draw_weapons(id);
         }
     }
 }
@@ -288,6 +436,13 @@ void show_weapons_page(){
         break;
     }
 }
+void pick_weapon(int i){
+    Weapon* weapon = game->floors[game->cf]->weapons_on_ground[i];
+    draw_item(weapon->x, weapon->y, game->floors[game->cf]->map[weapon->x][weapon->y]->type);
+    remove_weapon(game->cf, i);
+    game->bag->weapons[weapon->type]->count += weapon_count_per_collect[weapon->type];
+    show_message("You've picked up a ", weapon_icon[weapon->type]);
+}
 void handle_input(){
     while(true){
         int ch = getch();
@@ -297,12 +452,16 @@ void handle_input(){
         int id = game->cf;
         if(ch == 'w'){
             nx--;
+            game->player->dir = 2;
         }else if(ch == 's'){
             nx++;
+            game->player->dir = 0;
         }else if(ch == 'a'){
             ny--;
+            game->player->dir = 1;
        }else if(ch == 'd'){
             ny++;
+            game->player->dir = 3;
         }else if(ch == 'q'){
             nx--, ny--;
         }else if(ch == 'e'){
@@ -322,6 +481,10 @@ void handle_input(){
             show_bag();
             draw_map(id);
             continue;
+        }else if(ch == 'x'){
+            game->ignore_picking ^= 1;
+            update_status();
+            continue;
         }else if(ch == 'i'){ //open weapons page
             show_weapons_page();
             draw_map(id);
@@ -332,14 +495,16 @@ void handle_input(){
         //clear button Status bar
         clear_buttom_status_bar();
 
+        //Redraw weapons
+        draw_weapons(id);
         if(valid(nx, ny) && game->floors[id]->map[nx][ny]->type != Nothing && game->floors[id]->map[nx][ny]->type != Wall
             && game->floors[id]->map[nx][ny]->type != Pillar){
 
             //Preventing move through a monster
-            if(is_monster_on(id, nx, ny))
+            if(is_monster_on(id, nx, ny) != -1)
                 continue;  
-            if(is_weapon_on(id, nx, ny)){
-                
+            if(is_weapon_on(id, nx, ny) != -1 && !game->ignore_picking){
+                pick_weapon(is_weapon_on(id, nx, ny));
             }
 
             draw_item(x, y, game->floors[id]->map[x][y]->type);
@@ -364,7 +529,7 @@ void handle_input(){
                 //Trap activated
                 game->floors[id]->map[nx][ny]->activated = 1;
                 game->player->health -= 1;
-                show_message("Ooch! That was a trap");
+                show_message("Ooch! That was a trap", "");
                 update_status();
             }
 
@@ -378,14 +543,14 @@ void handle_input(){
                 //remove gold from ground
                 game->floors[id]->map[nx][ny]->type = Floor;
                 update_status();
-                show_message("One Gold Reicieved");
+                show_message("One Gold Reicieved", GOLD_UNICODE);
             }
             if(game->floors[id]->map[nx][ny]->type == Black_Gold){
                 game->player->black_golds += 1;
                 //remove gold from ground
                 game->floors[id]->map[nx][ny]->type = Floor;
                 update_status();
-                show_message("One Black Gold Reicieved");
+                show_message("One Black Gold Reicieved", BLACK_GOLD_UNICODE);
             }
         }
     }
@@ -406,7 +571,69 @@ void generate_dagger(int id){
             wep->x = x, wep->y = y;
             wep->active = 0;
             game->floors[id]->weapons_on_ground[game->floors[id]->weapon_count++] = wep;
-            printw("%d", game->floors[id]->weapon_count);
+            break;
+        }
+    
+    }
+}
+void generate_magic_wand(int id){
+    for(int i = 0; i < game->floors[id]->number_of_rooms; i++){
+        int j = random_num(1,100);
+        if(j > MAGIC_WAND_PROB)
+            continue;
+        while(1){
+            int x = rand() % (game->floors[id]->rooms[i]->h-4) + game->floors[id]->rooms[i]->startx + 2;
+            int y = rand() % (game->floors[id]->rooms[i]->w-4) + game->floors[id]->rooms[i]->starty + 2;
+            if(game->floors[id]->map[x][y]->type != Floor)
+                continue;
+            Weapon *wep = malloc(sizeof(Weapon));
+            wep->count = weapon_count_per_collect[Magic_Wand];
+            wep->type = Magic_Wand;
+            wep->x = x, wep->y = y;
+            wep->active = 0;
+            game->floors[id]->weapons_on_ground[game->floors[id]->weapon_count++] = wep;
+            break;
+        }
+    
+    }
+}
+void generate_sword(int id){
+    for(int i = 0; i < game->floors[id]->number_of_rooms; i++){
+        int j = random_num(1,100);
+        if(j > SWORD_PROB)
+            continue;
+        while(1){
+            int x = rand() % (game->floors[id]->rooms[i]->h-4) + game->floors[id]->rooms[i]->startx + 2;
+            int y = rand() % (game->floors[id]->rooms[i]->w-4) + game->floors[id]->rooms[i]->starty + 2;
+            if(game->floors[id]->map[x][y]->type != Floor)
+                continue;
+            Weapon *wep = malloc(sizeof(Weapon));
+            wep->count = 1;
+            wep->type = Sword;
+            wep->x = x, wep->y = y;
+            wep->active = 0;
+            game->floors[id]->weapons_on_ground[game->floors[id]->weapon_count++] = wep;
+            break;
+        }
+    
+    }
+}
+void generate_arrow(int id){
+    for(int i = 0; i < game->floors[id]->number_of_rooms; i++){
+        int j = random_num(1,100);
+        if(j > ARROW_PROB)
+            continue;
+        while(1){
+            int x = rand() % (game->floors[id]->rooms[i]->h-4) + game->floors[id]->rooms[i]->startx + 2;
+            int y = rand() % (game->floors[id]->rooms[i]->w-4) + game->floors[id]->rooms[i]->starty + 2;
+            if(game->floors[id]->map[x][y]->type != Floor)
+                continue;
+            Weapon *wep = malloc(sizeof(Weapon));
+            wep->count = weapon_count_per_collect[Arrow];
+            wep->type = Arrow;
+            wep->x = x, wep->y = y;
+            wep->active = 0;
+            game->floors[id]->weapons_on_ground[game->floors[id]->weapon_count++] = wep;
             break;
         }
     
