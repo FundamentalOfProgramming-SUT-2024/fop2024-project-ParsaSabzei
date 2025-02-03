@@ -144,7 +144,7 @@ Settings load_settings(char* username){
 }
 
 void save_player(FILE* file, Player* player){
-    fwrite(game->player, sizeof(Player), 1, file);
+    fwrite(player, sizeof(Player), 1, file);
 }
 Player* load_player(FILE* file){
     Player *player = malloc(sizeof(Player));
@@ -168,6 +168,31 @@ Room* load_room(FILE *file) {
     room->win = newwin(room->h, room->w, room->startx, room->starty);
     return room;
 }
+void save_spell(FILE* file, Spell* spell){
+    fwrite(spell, sizeof(Spell), 1, file);
+}
+Spell* load_spell(FILE* file){
+    Spell *spell = malloc(sizeof(Spell));
+    fread(spell, sizeof(Spell), 1, file);
+    return spell;
+}
+void save_monster(FILE* file, Monster* monster){
+    fwrite(monster, sizeof(Monster), 1, file);
+}
+Monster* load_monster(FILE* file){
+    Monster *monster = malloc(sizeof(Monster));
+    fread(monster, sizeof(Monster), 1, file);
+    return monster;
+}
+void save_weapon(FILE* file, Weapon* weapon){
+    fwrite(weapon, sizeof(Weapon), 1, file);
+}
+Weapon* load_weapon(FILE* file){
+    Weapon *weapon = malloc(sizeof(Weapon));
+    fread(weapon, sizeof(Weapon), 1, file);
+    return weapon;
+}
+
 void save_tabaghe(FILE* file, Tabaghe* tabaghe){
     fwrite(&tabaghe->number_of_rooms, sizeof(int), 1, file);
 
@@ -176,11 +201,29 @@ void save_tabaghe(FILE* file, Tabaghe* tabaghe){
         save_room(file, tabaghe->rooms[i]);
     }
 
-    //Saving tabaghe
+    //Saving points
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++) {
             fwrite(tabaghe->map[i][j], sizeof(Point), 1, file);
         }
+    }
+
+    //Saving monsters
+    fwrite(&tabaghe->monster_count, sizeof(int), 1, file);
+    for(int i = 0; i < tabaghe->monster_count; i++){
+        save_monster(file, tabaghe->monsters[i]);
+    }
+
+    //Saving weapons
+    fwrite(&tabaghe->weapon_count, sizeof(int), 1, file);
+    for(int i = 0; i < tabaghe->weapon_count; i++){
+        save_weapon(file, tabaghe->weapons_on_ground[i]);
+    }
+
+    //Saving spells
+    fwrite(&tabaghe->spell_count, sizeof(int), 1, file);
+    for(int i = 0; i < tabaghe->spell_count; i++){
+        save_spell(file, tabaghe->spells_on_ground[i]);
     }
 }
 Tabaghe* load_tabaghe(FILE *file) {
@@ -197,14 +240,47 @@ Tabaghe* load_tabaghe(FILE *file) {
             fread(tabaghe->map[i][j], sizeof(Point), 1, file);
         }
     }
+
+    fread(&tabaghe->monster_count, sizeof(int), 1, file);
+    for(int i = 0; i < tabaghe->monster_count; i++){
+        tabaghe->monsters[i] = load_monster(file);
+    }
+
+    fread(&tabaghe->weapon_count, sizeof(int), 1, file);
+    for(int i = 0; i < tabaghe->weapon_count; i++){
+        tabaghe->weapons_on_ground[i] = load_weapon(file);
+    }
+
+    fread(&tabaghe->spell_count, sizeof(int), 1, file);
+    for(int i = 0; i < tabaghe->spell_count; i++){
+        tabaghe->spells_on_ground[i] = load_spell(file);
+    }
     return tabaghe;
+}
+void save_bag(FILE* file, Bag* bag){
+    for(int i = 0; i < WEAPON_TYPES; i++){
+        save_weapon(file, bag->weapons[i]);
+    }
+    for(int i = 0; i < SPELL_TYPES; i++){
+        save_spell(file, bag->spells[i]);
+    }
+}
+Bag* load_bag(FILE* file){
+    Bag* bag = malloc(sizeof(Bag));
+    for(int i = 0; i < WEAPON_TYPES; i++){
+        bag->weapons[i] = load_weapon(file);
+    }
+    for(int i = 0; i < SPELL_TYPES; i++){
+        bag->spells[i] = load_spell(file);
+    }
+    return bag;
 }
 void save_game(char* username, Game* game){
     FILE* file = fopen(get_game_file_path(username), "wb");
     fwrite(&game->floor_count, sizeof(int), 1, file);
     fwrite(&game->cf, sizeof(int), 1, file);
-    fwrite(&game->ignore_hiding, sizeof(bool), 1, file);
-
+    fwrite(&game->ignore_hiding, sizeof(int), 1, file);
+    fwrite(&game->ignore_picking, sizeof(int), 1, file);
     //Saving player
     save_player(file, game->player);
     
@@ -212,6 +288,14 @@ void save_game(char* username, Game* game){
     for(int i = 0; i < game->floor_count; i++){
         save_tabaghe(file, game->floors[i]);
     }
+
+    //Saving bag
+    save_bag(file, game->bag);
+
+    //Loading active spells
+    for(int i = 0; i < SPELL_TYPES; i++)
+        fwrite(&game->active_spells[i], sizeof(int), 1, file);
+
     fclose(file);
 }
 Game* load_game(char*username){
@@ -219,14 +303,22 @@ Game* load_game(char*username){
     Game *game = malloc(sizeof(Game));
     fread(&game->floor_count, sizeof(int), 1, file);
     fread(&game->cf, sizeof(int), 1, file);
-    fread(&game->ignore_hiding, sizeof(bool), 1, file);
-
+    fread(&game->ignore_hiding, sizeof(int), 1, file);
+    fread(&game->ignore_picking, sizeof(int), 1, file);
     game->floors = malloc(sizeof(Tabaghe*) * game->floor_count);
     //Loading player
     game->player = load_player(file);
     for(int i = 0; i < game->floor_count; i++){
         game->floors[i] = load_tabaghe(file);
     }
+    
+    //Loading bag
+    game->bag = load_bag(file);
+
+    //Loading active spells
+    for(int i = 0; i < SPELL_TYPES; i++)
+        fread(&game->active_spells[i], sizeof(int), 1, file);
+
     fclose(file);
     return game;
 }

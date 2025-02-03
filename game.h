@@ -6,30 +6,20 @@
 
 const int inf = 1e9;
 
+//Parameters which determine game difficulty
+int min_deamons, max_deamons;
+int min_fire_breathing, max_fire_breathing;
+int min_giant, max_giant;
+int min_snake, max_snake;
+int min_undeed, max_undeed;
+int min_food, max_food;
+int secs_to_hunger;
+int secs_increase_heart;
+int secs_to_stand_spell;
+int init_hunger;
 
-int min_deamons = 1;
-int max_deamons = 3;
-
-int min_fire_breathing = 0;
-int max_fire_breathing = 2;
-
-int min_giant = 0;
-int max_giant = 2;
-
-int min_snake = 0;
-int max_snake = 1;
-
-int min_undeed = 0;
-int max_undeed = 1;
-
-int min_food = 1;
-int max_food = 3;
-
-int secs_to_hunger = 20;
-int secs_increase_heart = 10;
-int secs_to_stand_spell = 10;
-
-int init_hunger = 5;
+//higher value force snake to move mroe optimal
+#define SNAKE_RANDOMNESS_MOVE 16
 
 #define weapon_page_size 20
 
@@ -66,17 +56,19 @@ int init_hunger = 5;
 #define number_of_traps_min 0
 #define number_of_traps_max 1
 
+#define traps_inc_in_treasure_room 10
+
 // x in 10
 #define black_gold_prob 1
 
-#define number_of_room_min 8
+#define number_of_room_min 4
 #define number_of_rooms_max 5
 
 // room width and height include border
-#define room_width_min 8
-#define room_width_max 25
-#define room_height_min 7
-#define room_height_max 12
+#define room_width_min 10
+#define room_width_max 30
+#define room_height_min 10
+#define room_height_max 15
 
 #define rooms_min_distancex 5
 #define rooms_min_distancey 4
@@ -93,7 +85,8 @@ enum type{
     StairDown,
     Gold,
     Black_Gold,
-    Food
+    Food,
+    Endpoint
 };
 
 enum MonsterType{
@@ -134,32 +127,31 @@ char* spell_name[] = {"Health", "Speed", "Damage"};
 char* spell_icon[] = {"🧪", "🌿", "🔮"};
 
 typedef struct Spell{
-    enum SpellType type; //new
-    int count; //new
-    int x, y; //new
-    int active; //new
+    enum SpellType type;
+    int count;
+    int x, y;
+    int active;
 } Spell;
 
 typedef struct Weapon{
-    enum WeaponType type; //new
-    int count; //new
-    int x,y; //New
-    int active; //New
-    int following; //New
+    enum WeaponType type;
+    int count;
+    int x,y;
+    int active;
 } Weapon;
 
 typedef struct Monster{
-    enum MonsterType type; //new
-    int x, y; //new
-    int health; //new
-    int active; //new
-    int following; //new
-    int number_of_move_following; //new
+    enum MonsterType type;
+    int x, y;
+    int health;
+    int active;
+    int following;
+    int number_of_move_following;
 } Monster;
 
 typedef struct Bag
 {
-    Weapon* weapons[N]; //new
+    Weapon* weapons[N];
     Spell* spells[N];
 } Bag;
 
@@ -174,8 +166,8 @@ typedef struct Player{
     int Golds;
     int black_golds;
     int weapon;
-    int dir; //New
-    int hunger; //New
+    int dir;
+    int hunger;
 } Player;
 
 typedef struct Point{
@@ -195,21 +187,21 @@ typedef struct Tabaghe{
     int number_of_rooms;
     Room** rooms;
     Point* map[N][N];
-    int monster_count; //new
-    Monster* monsters[N]; //new
-    int weapon_count; //New
-    Weapon* weapons_on_ground[N]; //New
-    int spell_count; //New
-    Spell* spells_on_ground[N]; //New
+    int monster_count;
+    Monster* monsters[N];
+    int weapon_count;
+    Weapon* weapons_on_ground[N];
+    int spell_count;
+    Spell* spells_on_ground[N];
 } Tabaghe;
 
 typedef struct Game{
     int floor_count;
     int cf; // current floor
-    Tabaghe** floors;
-    Player* player;
     int ignore_hiding;
     int ignore_picking;
+    Player* player;
+    Tabaghe** floors;
     Bag* bag; //New
     int active_spells[N]; //New
 } Game;
@@ -222,6 +214,7 @@ WINDOW* bag_win, *weapon_win, *spell_win; //New
 Settings setting;
 time_t last_time_attacked;
 time_t last_time_spells[SPELL_TYPES];
+int treasure_room;
 
 char* GOLD_UNICODE = "\u2756";
 char* BLACK_GOLD_UNICODE = "\u25c8";
@@ -230,6 +223,7 @@ char* ARROW_DOWN_UNICODE = "\u2193";
 char* MAGIC_WAND_BULLET = "✹";
 char* ARROW_UNICODE = "⚆";
 char* FOOD_UNICODE = "~";
+char* ENDPOINT_UNICODE = "🕊️";
 
 int basic_colors[N];
 int dx[] = {+1, 0, -1, 0, 0}, dy[] = {0, -1, 0, +1, 0};
@@ -257,6 +251,7 @@ void draw_corridor(int, int);
 void draw_room(Room*);
 void draw_stair_up(int, int);
 void draw_stair_down(int, int);
+void draw_endpoint(int, int);
 void draw_deamon(int, int);
 void draw_undeed(int, int);
 void draw_fire_breathing(int, int);
@@ -268,6 +263,7 @@ void activate_corridor(int, int, int);
 int dist(int, int, int, int);
 void generate_traps(int);
 void generate_floor(int, int);
+void set_treasure_room();
 void generate_stair_up(int);
 void generate_dagger(int);
 void generate_fire_breathing(int);
@@ -282,9 +278,7 @@ void generate_arrow(int);
 void generate_snake(int);
 void generate_undeed(int);
 void generate_food(int);
-void generate_health_spell(int);
-void generate_speed_spell(int);
-void generate_damage_spell(int);
+void generate_spell(int, enum SpellType);
 void move_to_floor(int);
 void init_status_bar();
 void show_message(char*, char*);
@@ -301,6 +295,7 @@ void pick_weapon(int);
 void kill_monster(int, int);
 void remove_weapon(int, int);
 void enter_new_room(int, int);
+void set_game_difficulty();
 
 int is_monster_on(int id, int nx, int ny){
     for(int i = 0; i < game->floors[id]->monster_count; i++)
@@ -386,6 +381,9 @@ void draw_gold(int i, int j){
     mvaddstr(i, j, GOLD_UNICODE);
     attroff(COLOR_PAIR(basic_colors[1]));
 }
+void draw_endpoint(int i, int j){
+    mvaddstr(i, j, ENDPOINT_UNICODE);
+}
 void draw_deamon(int i, int j){
     attron(COLOR_PAIR(basic_colors[0]));
     mvaddstr(i, j, "D");
@@ -460,6 +458,9 @@ void draw_item(int i, int j, enum type tp){
             break;
         case Food:
             draw_food(i, j);
+            break;
+        case Endpoint:
+            draw_endpoint(i, j);
             break;
     }
 }

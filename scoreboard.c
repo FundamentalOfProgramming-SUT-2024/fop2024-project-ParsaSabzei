@@ -10,6 +10,9 @@ void scoreboard_handle_input();
 char* username;
 const int COLUMN = 6;
 
+//special names near the 3 best players' names
+char* special_names[] = {"Champion", "Hero", "Master"};
+
 void scoreboard_draw_main_screen(WINDOW* main, char* _username){
     username = _username;
     clear();
@@ -41,6 +44,8 @@ void scoreboard_draw_main_screen(WINDOW* main, char* _username){
         char** c = malloc(COLUMN * sizeof(char*));
         c[0] = tostring(i + 1);
         c[1] = usernames[ids[i]];
+        if(i < 3)
+            c[1] = append(append(special_names[i], ": "), c[1]);
         c[2] = tostring(info[ids[i]].total_scores);
         c[3] = tostring(info[ids[i]].total_golds);
         c[4] = tostring(info[ids[i]].total_game_played);
