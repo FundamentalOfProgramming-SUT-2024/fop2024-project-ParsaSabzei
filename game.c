@@ -1,6 +1,6 @@
 #include <ncurses.h>
 #include "game.h"
-#include<pthread.h>
+#include <pthread.h>
 
 char *username;
 
@@ -28,8 +28,12 @@ void update_status()
         wattroff(status_win, COLOR_PAIR(basic_colors[0]));
     }
 
+    for(int i = 0; i < SPELL_TYPES; i++){
+        if(game->active_spells[i]) // if ith spell is active draw it
+            mvwprintw(status_win, 1, 60 + 4 * i, "%s", spell_icon[i]);
+    }
     for (int i = 0; i < game->player->hunger; i++)
-        mvwprintw(status_win, 1, 60 + 4 * i, "%s", FOOD_UNICODE);
+        mvwprintw(status_win, 1, 120 + 4 * i, "🍖");
 
     // Printing player's health
     //  COLS - 25 + 4 * i
@@ -51,6 +55,7 @@ void generate_floor(int id, int stair_room)
 {
     game->floors[id]->weapon_count = 0;
     game->floors[id]->monster_count = 0;
+    game->floors[id]->spell_count = 0;
     for (int i = 0; i < N; i++)
         for (int j = 0; j < N; j++)
         {
@@ -83,6 +88,9 @@ void generate_floor(int id, int stair_room)
     generate_sword(id);
     generate_arrow(id);
     generate_food(id);
+    generate_health_spell(id);
+    generate_speed_spell(id);
+    generate_damage_spell(id);
     if (id != game->floor_count - 1)
         generate_stair_up(id);
 }
@@ -96,6 +104,13 @@ void create_new_game()
     for (int i = 0; i < game->floor_count; i++)
         game->floors[i] = (Tabaghe *)malloc(sizeof(Tabaghe));
 
+    for(int i = 0; i < SPELL_TYPES; i++){
+        game->active_spells[i] = 0;
+        Spell *spell = malloc(sizeof(Spell));
+        spell->type = i;
+        spell->count = 0;
+        game->bag->spells[i] = spell;
+    }
     for (int i = 0; i < WEAPON_TYPES; i++)
     {
         Weapon *wep = malloc(sizeof(Weapon));
@@ -134,21 +149,44 @@ void create_new_game()
     activate_monster(0, 0);
     enter_new_room(0, 0);
 }
-void* hunger(){
-    while(1){
+void *hunger()
+{
+    while (1)
+    {
         sleep(20);
         game->player->hunger -= 1;
         update_status();
     }
 }
-void* health_increase(){
-    while(1){
+void *health_increase()
+{
+    while (1)
+    {
         sleep(1);
         time_t elapsed = time(NULL) - last_time_attacked;
-        if(elapsed >= secs_increase_heart){
-            if(game->player->hunger == init_hunger)
+        int t = secs_increase_heart;
+        if(game->active_spells[Health])
+            t /= 2;
+        if (elapsed >= t)
+        {
+            if (game->player->hunger == init_hunger || game->active_spells[Health])
                 game->player->health += 1;
             last_time_attacked = time(NULL);
+        }
+    }
+}
+void *spell_management(){
+    while(1){
+        sleep(1);
+        for(int i = 0; i < SPELL_TYPES; i++){
+            if(game->active_spells[i] == 0)
+                continue;
+            time_t elapsed = time(NULL) - last_time_spells[i];
+            if(elapsed >= secs_to_stand_spell){
+                game->active_spells[i] = 0;
+                update_status();
+                show_message(spell_name[i], " Spell Ended!");
+            }
         }
     }
 }
@@ -171,12 +209,13 @@ void init_game(WINDOW *main, char *_username, int scr)
     // init bag and weapon page
     bag_win = newwin(LINES - 10, COLS - 20, 5, 10);
     weapon_win = newwin(weapon_page_size, weapon_page_size * 2, (LINES - weapon_page_size) / 2, COLS / 2 - weapon_page_size);
+    spell_win = newwin(weapon_page_size, weapon_page_size * 2, (LINES - weapon_page_size) / 2, COLS / 2 - weapon_page_size);
 
-
-    //init threads
-    pthread_t hunger_thread, health_thread;
+    // init threads
+    pthread_t hunger_thread, health_thread, spell_thread;
     pthread_create(&hunger_thread, NULL, hunger, NULL);
     pthread_create(&health_thread, NULL, health_increase, NULL);
+    pthread_create(&spell_thread, NULL, spell_management, NULL);
 
     draw_map(game->cf);
     refresh();
@@ -227,6 +266,16 @@ void draw_weapons(int id)
                  "%s", weapon_icon[game->floors[id]->weapons_on_ground[i]->type]);
     }
 }
+void draw_spells(int id)
+{
+     for (int i = 0; i < game->floors[id]->spell_count; i++)
+    {
+        if (game->floors[id]->spells_on_ground[i]->active == 0 && !game->ignore_hiding)
+            continue;
+        mvprintw(game->floors[id]->spells_on_ground[i]->x, game->floors[id]->spells_on_ground[i]->y,
+                 "%s", spell_icon[game->floors[id]->spells_on_ground[i]->type]);
+    } 
+}
 void draw_map(int id)
 {
     clear();
@@ -244,6 +293,7 @@ void draw_map(int id)
     draw_player();
     draw_monsters(id);
     draw_weapons(id);
+    draw_spells(id);
     update_status();
     refresh();
 }
@@ -283,7 +333,9 @@ void attack()
         }
     }
     else if (game->player->weapon == Dagger)
-    {
+    {  
+        if(!game->bag->weapons[Dagger]->count)
+            return;
         game->bag->weapons[Dagger]->count--;
 
         int x = game->player->x, y = game->player->y;
@@ -321,6 +373,8 @@ void attack()
     }
     else if (game->player->weapon == Magic_Wand)
     {
+        if(!game->bag->weapons[Magic_Wand]->count)
+            return;
         game->bag->weapons[Magic_Wand]->count--;
 
         int x = game->player->x, y = game->player->y;
@@ -391,6 +445,8 @@ void attack()
     }
     else if (game->player->weapon == Arrow)
     {
+        if(!game->bag->weapons[Arrow]->count)
+            return;
         game->bag->weapons[Arrow]->count--;
 
         int x = game->player->x, y = game->player->y;
@@ -437,39 +493,38 @@ void move_monsters(int id, int nx, int ny, int room)
         {
             // Bfs for finding best dir for snake
             int mnsx, mnsy;
-            
-                int queue[N * N];
-                int dis[N][N], par[N][N];
-                int sx = nx, sy = ny;
-                memset(dis, 63, sizeof(dis));
-                dis[sx][sy] = 0, queue[0] = sx * N + sy;
-                par[sx][sy] = -1;
-                int f = 0, qsz = 1;
 
-                while (f < qsz)
+            int queue[N * N];
+            int dis[N][N], par[N][N];
+            int sx = nx, sy = ny;
+            memset(dis, 63, sizeof(dis));
+            dis[sx][sy] = 0, queue[0] = sx * N + sy;
+            par[sx][sy] = -1;
+            int f = 0, qsz = 1;
+
+            while (f < qsz)
+            {
+                int x = queue[f] / N, y = queue[f] % N;
+                f++;
+                for (int j = 0; j < 4; j++)
                 {
-                    int x = queue[f] / N, y = queue[f] % N;
-                    f++;
-                    for (int j = 0; j < 4; j++)
+                    int nnx = dx[j] + x, nny = dy[j] + y;
+                    if (valid(nnx, nny) && dis[nnx][nny] > dis[x][y] + 1)
                     {
-                        int nnx = dx[j] + x, nny = dy[j] + y;
-                        if (valid(nnx, nny) && dis[nnx][nny] > dis[x][y] + 1)
-                        {
-                            // Prevent moving through walls
-                            if (game->floors[id]->map[nnx][nny]->type == Wall || game->floors[id]->map[nnx][nny]->type == Pillar
-                                || game->floors[id]->map[nx][ny]->discovered == 0 || game->floors[id]->map[nx][ny] == Nothing)
-                                continue;
-                            dis[nnx][nny] = dis[x][y] + 1;
-                            par[nnx][nny] = x * N + y;
-                            queue[qsz++] = nnx * N + nny;
-                        }
+                        // Prevent moving through walls
+                        if (game->floors[id]->map[nnx][nny]->type == Wall || game->floors[id]->map[nnx][nny]->type == Pillar || game->floors[id]->map[nx][ny]->discovered == 0 || game->floors[id]->map[nx][ny] == Nothing)
+                            continue;
+                        dis[nnx][nny] = dis[x][y] + 1;
+                        par[nnx][nny] = x * N + y;
+                        queue[qsz++] = nnx * N + nny;
                     }
                 }
-                int distx = game->floors[id]->monsters[i]->x;
-                int disty = game->floors[id]->monsters[i]->y;
-                mnsx = par[distx][disty] / N, mnsy = par[distx][disty] % N;
-            
-            if(dist(mnsx, mnsy, nx, ny) == 0)
+            }
+            int distx = game->floors[id]->monsters[i]->x;
+            int disty = game->floors[id]->monsters[i]->y;
+            mnsx = par[distx][disty] / N, mnsy = par[distx][disty] % N;
+
+            if (dist(mnsx, mnsy, nx, ny) == 0)
                 continue;
             if (dist(mnsx, mnsy, nx, ny) == 1)
             {
@@ -497,7 +552,7 @@ void move_monsters(int id, int nx, int ny, int room)
             {
                 int mnsx = x + dx[j];
                 int mnsy = y + dy[j];
-                if (!valid(mnsx, mnsy) || game->floors[id]->map[mnsx][mnsy]->type == Wall || 
+                if (!valid(mnsx, mnsy) || game->floors[id]->map[mnsx][mnsy]->type == Wall ||
                     game->floors[id]->map[mnsx][mnsy]->type == Door || game->floors[id]->map[mnsx][mnsy]->type == Pillar ||
                     (is_monster_on(id, mnsx, mnsy) != -1) || (nx == mnsx && ny == mnsy))
                     continue;
@@ -540,6 +595,13 @@ void show_bag()
     {
         mvwprintw(bag_win, 2 * i + 3, 3, "%s(%s ): %d", weapon_name[i], weapon_icon[i], game->bag->weapons[i]->count);
     }
+
+    mvwprintw(bag_win, 1, 50, "Spells:");
+
+    for (int i = 0; i < SPELL_TYPES; i++)
+    {
+        mvwprintw(bag_win, 2 * i + 3, 50, "%s(%s ): %d", spell_name[i], spell_icon[i], game->bag->spells[i]->count);
+    }
     wrefresh(bag_win);
     refresh();
     while (getch() != 'r')
@@ -571,17 +633,42 @@ void show_weapons_page()
     while (1)
     {
         int c = getch();
-        if (c == 'y')
-        {
-            game->player->weapon = NoWeapon;
-            break;
-        }
-        else if (c == 'i')
+        if (c == 'i')
             break;
         int num = c - '0';
         if (num > WEAPON_TYPES || num < 1)
             continue;
         game->player->weapon = num - 1;
+        break;
+    }
+}
+void show_spells_page()
+{
+    box(spell_win, 0, 0);
+    for (int i = 0; i < SPELL_TYPES; i++)
+    {
+
+        if (game->bag->spells[i]->count)
+            mvwprintw(spell_win, 2 * i + 3, 3, "%s(%s ): %d    Press %d to select", spell_name[i], spell_icon[i], game->bag->spells[i]->count, i + 1);
+        else
+            mvwprintw(spell_win, 2 * i + 3, 3, "%s(%s ): %d", spell_name[i], spell_icon[i], game->bag->spells[i]->count);
+    }
+
+    wrefresh(spell_win);
+    refresh();
+    while (1)
+    {
+        int c = getch();
+        if (c == 'p')
+            break;
+        int num = c - '0';
+        if (num > SPELL_TYPES || num < 1)
+            continue;
+        num--;
+        // consume ith spell
+        game->active_spells[num] = 1;
+        last_time_spells[num] = time(NULL);
+        update_status();
         break;
     }
 }
@@ -592,6 +679,14 @@ void pick_weapon(int i)
     remove_weapon(game->cf, i);
     game->bag->weapons[weapon->type]->count += weapon_count_per_collect[weapon->type];
     show_message("You've picked up a ", weapon_icon[weapon->type]);
+}
+void pick_spell(int i)
+{
+    Spell *spell = game->floors[game->cf]->spells_on_ground[i];
+    draw_item(spell->x, spell->y, game->floors[game->cf]->map[spell->x][spell->y]->type);
+    remove_spell(game->cf, i);
+    game->bag->spells[spell->type]->count += 1;
+    show_message("You've picked up a ", spell_icon[spell->type]);
 }
 void enter_new_room(int id, int i)
 {
@@ -618,7 +713,7 @@ void handle_input()
         else if (ch == 's')
         {
             nx++;
-            game->player->dir = 0; 
+            game->player->dir = 0;
         }
         else if (ch == 'a')
         {
@@ -674,6 +769,11 @@ void handle_input()
             show_weapons_page();
             draw_map(id);
             continue;
+        }else if(ch == 'p'){
+            //open spell page
+            show_spells_page();
+            draw_map(id);
+            continue;
         }
         else
             continue;
@@ -681,8 +781,6 @@ void handle_input()
         // clear button Status bar
         clear_buttom_status_bar();
 
-        // Redraw weapons
-        draw_weapons(id);
         if (valid(nx, ny) && game->floors[id]->map[nx][ny]->type != Nothing && game->floors[id]->map[nx][ny]->type != Wall && game->floors[id]->map[nx][ny]->type != Pillar)
         {
 
@@ -693,6 +791,10 @@ void handle_input()
             {
                 pick_weapon(is_weapon_on(id, nx, ny));
             }
+ 
+            if(is_spell_on(id, nx, ny) != -1 && !game->ignore_picking){
+                pick_spell(is_spell_on(id, nx, ny));
+            }  
 
             draw_item(x, y, game->floors[id]->map[x][y]->type);
             game->player->y = ny;
@@ -748,6 +850,90 @@ void handle_input()
                 update_status();
                 show_message("One Black Gold Reicieved", BLACK_GOLD_UNICODE);
             }
+            if(game->floors[id]->map[nx][ny]->type == Food)
+            {
+                // remove meat from ground
+                game->floors[id]->map[nx][ny]->type = Floor;
+
+                if(game->player->hunger == init_hunger)
+                    continue;
+                game->player->hunger += 1;
+                update_status();
+                show_message("One Food Reicieved", FOOD_UNICODE);
+            }
+        }
+
+        draw_monsters(id);
+        draw_weapons(id);
+        draw_spells(id);
+        if(game->player->health <= 0){
+            clear();
+        }
+    }
+}
+void generate_health_spell(int id){
+    for (int i = 0; i < game->floors[id]->number_of_rooms; i++)
+    {
+        int j = random_num(1, 100);
+        if (j > SPELL_PROB)
+            continue;
+        while (1)
+        {
+            int x = rand() % (game->floors[id]->rooms[i]->h - 4) + game->floors[id]->rooms[i]->startx + 2;
+            int y = rand() % (game->floors[id]->rooms[i]->w - 4) + game->floors[id]->rooms[i]->starty + 2;
+            if (game->floors[id]->map[x][y]->type != Floor)
+                continue;
+            Spell *wep = malloc(sizeof(Spell));
+            wep->count = 1;
+            wep->type = Health;
+            wep->x = x, wep->y = y;
+            wep->active = 0;
+            game->floors[id]->spells_on_ground[game->floors[id]->spell_count++] = wep;
+            break;
+        }
+    }
+}
+void generate_speed_spell(int id){
+    for (int i = 0; i < game->floors[id]->number_of_rooms; i++)
+    {
+        int j = random_num(1, 100);
+        if (j > SPELL_PROB)
+            continue;
+        while (1)
+        {
+            int x = rand() % (game->floors[id]->rooms[i]->h - 4) + game->floors[id]->rooms[i]->startx + 2;
+            int y = rand() % (game->floors[id]->rooms[i]->w - 4) + game->floors[id]->rooms[i]->starty + 2;
+            if (game->floors[id]->map[x][y]->type != Floor)
+                continue;
+            Spell *wep = malloc(sizeof(Spell));
+            wep->count = 1;
+            wep->type = Speed;
+            wep->x = x, wep->y = y;
+            wep->active = 0;
+            game->floors[id]->spells_on_ground[game->floors[id]->spell_count++] = wep;
+            break;
+        }
+    }
+}
+void generate_damage_spell(int id){
+        for (int i = 0; i < game->floors[id]->number_of_rooms; i++)
+    {
+        int j = random_num(1, 100);
+        if (j > SPELL_PROB)
+            continue;
+        while (1)
+        {
+            int x = rand() % (game->floors[id]->rooms[i]->h - 4) + game->floors[id]->rooms[i]->startx + 2;
+            int y = rand() % (game->floors[id]->rooms[i]->w - 4) + game->floors[id]->rooms[i]->starty + 2;
+            if (game->floors[id]->map[x][y]->type != Floor)
+                continue;
+            Spell *wep = malloc(sizeof(Spell));
+            wep->count = 1;
+            wep->type = Damage;
+            wep->x = x, wep->y = y;
+            wep->active = 0;
+            game->floors[id]->spells_on_ground[game->floors[id]->spell_count++] = wep;
+            break;
         }
     }
 }

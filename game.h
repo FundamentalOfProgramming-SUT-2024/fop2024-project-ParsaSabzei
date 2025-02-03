@@ -27,6 +27,7 @@ int max_food = 3;
 
 int secs_to_hunger = 20;
 int secs_increase_heart = 10;
+int secs_to_stand_spell = 10;
 
 int init_hunger = 5;
 
@@ -43,6 +44,9 @@ int init_hunger = 5;
 
 //x in 100  
 #define MAGIC_WAND_PROB 10
+
+//x in 100
+#define SPELL_PROB 50
 
 #define MIN_NUMBER_OF_FLOORS 4
 #define MAX_NUMBER_OF_FLOORS 5
@@ -110,6 +114,12 @@ enum WeaponType{
     NoWeapon
 };
 
+#define SPELL_TYPES 3
+enum SpellType{
+    Health, 
+    Speed,
+    Damage
+};
 
 int weapon_damage[] = {5, 12, 15, 5, 10, 0};
 char* weapon_name[] = {"Mace", "Dagger", "Magic_Wand", "Arrow", "Sword", "No weapon"};
@@ -119,6 +129,16 @@ int monsters_health[] = {5, 10, 15, 20, 30};
 int monsters_damage[] = {1, 2, 3, 4, 6};
 char* monsters_name[] = {"Deamon Monster", "Fire breathing Monster", "Giant Monster", "Snake", "Undeed Monster"};
 int followings[] = {inf, inf, 3, inf, 5};
+
+char* spell_name[] = {"Health", "Speed", "Damage"};
+char* spell_icon[] = {"🧪", "🌿", "🔮"};
+
+typedef struct Spell{
+    enum SpellType type; //new
+    int count; //new
+    int x, y; //new
+    int active; //new
+} Spell;
 
 typedef struct Weapon{
     enum WeaponType type; //new
@@ -140,6 +160,7 @@ typedef struct Monster{
 typedef struct Bag
 {
     Weapon* weapons[N]; //new
+    Spell* spells[N];
 } Bag;
 
 typedef struct Pair{
@@ -178,6 +199,8 @@ typedef struct Tabaghe{
     Monster* monsters[N]; //new
     int weapon_count; //New
     Weapon* weapons_on_ground[N]; //New
+    int spell_count; //New
+    Spell* spells_on_ground[N]; //New
 } Tabaghe;
 
 typedef struct Game{
@@ -188,15 +211,17 @@ typedef struct Game{
     int ignore_hiding;
     int ignore_picking;
     Bag* bag; //New
+    int active_spells[N]; //New
 } Game;
 
 
 
 Game* game;
 WINDOW* status_win;
-WINDOW* bag_win, *weapon_win; //New
+WINDOW* bag_win, *weapon_win, *spell_win; //New
 Settings setting;
 time_t last_time_attacked;
+time_t last_time_spells[SPELL_TYPES];
 
 char* GOLD_UNICODE = "\u2756";
 char* BLACK_GOLD_UNICODE = "\u25c8";
@@ -204,7 +229,7 @@ char* ARROW_UP_UNICODE = "\u2191";
 char* ARROW_DOWN_UNICODE = "\u2193";
 char* MAGIC_WAND_BULLET = "✹";
 char* ARROW_UNICODE = "⚆";
-char* FOOD_UNICODE = "🍖";
+char* FOOD_UNICODE = "~";
 
 int basic_colors[N];
 int dx[] = {+1, 0, -1, 0, 0}, dy[] = {0, -1, 0, +1, 0};
@@ -257,6 +282,9 @@ void generate_arrow(int);
 void generate_snake(int);
 void generate_undeed(int);
 void generate_food(int);
+void generate_health_spell(int);
+void generate_speed_spell(int);
+void generate_damage_spell(int);
 void move_to_floor(int);
 void init_status_bar();
 void show_message(char*, char*);
@@ -268,6 +296,7 @@ void show_bag();
 void show_weapons_page();
 void activate_monster(int, int);
 void activate_weapon(int, int);
+void activate_spell(int, int);
 void pick_weapon(int);
 void kill_monster(int, int);
 void remove_weapon(int, int);
@@ -276,6 +305,12 @@ void enter_new_room(int, int);
 int is_monster_on(int id, int nx, int ny){
     for(int i = 0; i < game->floors[id]->monster_count; i++)
         if(game->floors[id]->monsters[i]->x == nx && game->floors[id]->monsters[i]->y == ny)
+            return i;
+    return -1;
+}
+int is_spell_on(int id, int nx, int ny){
+    for(int i = 0; i < game->floors[id]->spell_count; i++)
+        if(game->floors[id]->spells_on_ground[i]->x == nx && game->floors[id]->spells_on_ground[i]->y == ny)
             return i;
     return -1;
 }
@@ -454,6 +489,7 @@ void activate_room(int i, int id){
             game->floors[id]->map[x][y]->discovered = 1;
     activate_monster(i, id);
     activate_weapon(i, id);
+    activate_spell(i, id);
 }
 //get current room of jth monster in the id floor
 int get_monster_room(int j, int id){
@@ -481,6 +517,19 @@ int get_weapon_room(int j, int id){
     }
     return -1;
 }
+//get current room of jth spell in the id floor
+int get_spell_room(int j, int id){
+    int x = game->floors[id]->spells_on_ground[j]->x;
+    int y = game->floors[id]->spells_on_ground[j]->y;
+    for(int i = 0; i < game->floors[id]->number_of_rooms; i++){
+        int stx = game->floors[id]->rooms[i]->startx, enx = game->floors[id]->rooms[i]->h + stx;
+        int sty =  game->floors[id]->rooms[i]->starty, eny = game->floors[id]->rooms[i]->w + sty;
+        if(x >= stx && x < enx && y >= sty && y < eny){
+            return i;
+        }
+    }
+    return -1;
+}
 //Activating monsters entering the ith room
 void activate_monster(int i, int id){
     for(int j = 0; j < game->floors[id]->monster_count; j++)
@@ -491,6 +540,11 @@ void activate_weapon(int i, int id){
     for(int j = 0; j < game->floors[id]->weapon_count; j++)
         if(get_weapon_room(j, id) == i)
             game->floors[id]->weapons_on_ground[j]->active = 1;
+}
+void activate_spell(int i, int id){
+    for(int j = 0; j < game->floors[id]->spell_count; j++)
+        if(get_spell_room(j, id) == i)
+            game->floors[id]->spells_on_ground[j]->active = 1;
 }
 void activate_corridor(int x, int y, int id){
     for(int i = 0; i < LINES; i++)
@@ -525,6 +579,13 @@ void remove_weapon(int id, int ind){
     for(int i = ind + 1; i < game->floors[id]->weapon_count; i++)
         game->floors[id]->weapons_on_ground[i - 1] = game->floors[id]->weapons_on_ground[i];
     game->floors[id]->weapon_count--;
+}
+//Remove indth spell on ground on the idth floor
+void remove_spell(int id, int ind){
+    int x = game->floors[id]->spells_on_ground[ind]->x, y = game->floors[id]->spells_on_ground[ind]->y;
+    for(int i = ind + 1; i < game->floors[id]->spell_count; i++)
+        game->floors[id]->spells_on_ground[i - 1] = game->floors[id]->spells_on_ground[i];
+    game->floors[id]->spell_count--;
 }
 void clear_buttom_status_bar(){
     for(int i = 0; i < COLS; i++)

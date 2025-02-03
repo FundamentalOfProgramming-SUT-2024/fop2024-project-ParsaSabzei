@@ -1,11 +1,10 @@
-#include<ncurses.h>
+#include <ncursesw/ncurses.h> 
 
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
 #include<unistd.h>
 #include<pthread.h>
-
 //Unicode
 #include <wchar.h>
 #include <locale.h>
@@ -36,6 +35,7 @@ int main(){
     clear();
     
     WINDOW* mn = initscr();
+
     if(!st_color()){
         endwin();
         printf("Color doesn't supported");
