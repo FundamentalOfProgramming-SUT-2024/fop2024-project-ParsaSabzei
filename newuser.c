@@ -31,7 +31,7 @@ void newuser_draw_main_screen(WINDOW* main){
 
     //Info
     move(2, COLS/2 - 14);
-    printw("Please enter your information...");
+    printw("Press 1 to generate password randomly");
 
     refresh();
     // Inputs
@@ -56,6 +56,12 @@ void newuser_handle_input(){
     while(true){
         int ch = getch();
 
+        if(ch == '1'){
+            char*pass = random_password();
+            for(int i = 0; i < strlen(pass); i++)
+                write_inp(inps[1], pass[i], inp_padding);
+            continue;
+        }
         //Ignore ENTER when btn is not selected
         if(ch == 10 && inp_count != cur_input + 1)
             continue;

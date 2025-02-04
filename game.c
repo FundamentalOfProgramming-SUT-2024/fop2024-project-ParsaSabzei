@@ -37,7 +37,7 @@ void update_status()
     mvwprintw(status_win, 1, 80, "Game Difficulty: %s", Difficulty_Names[setting.Difficulty]);
 
     for (int i = 0; i < game->player->hunger; i++)
-        mvwprintw(status_win, 1, 120 + 4 * i, "🍖");
+        mvwprintw(status_win, 1, 120 + 4 * i, "%s", FOOD_UNICODE);
 
     // Printing player's health
     //  COLS - 25 + 4 * i
@@ -70,6 +70,7 @@ void generate_floor(int id, int stair_room)
         }
 
     generate_rooms(id, stair_room);
+    generate_enchant_room(id);
 
     if(id == game->floor_count - 1)
         set_treasure_room();
@@ -85,6 +86,8 @@ void generate_floor(int id, int stair_room)
     }
     generate_golds(id);
     generate_black_golds(id);
+    generate_hidden_doors(id);
+
     generate_deamon(id);
     generate_fire_breathing(id);
     generate_giant(id);
@@ -194,6 +197,9 @@ void *health_increase()
             t /= 4;
         if (elapsed >= t)
         {
+            if(game->player->health == init_health){
+                continue;
+            }
             if (game->player->hunger == init_hunger)
                 game->player->health += 1;
             if (game->active_spells[Health])
@@ -238,9 +244,10 @@ void set_game_difficulty()
         min_food = 3;
         max_food = 5;
         secs_to_hunger = 40;
-        secs_increase_heart = 1;
+        secs_increase_heart = 8;
         secs_to_stand_spell = 20;
         init_hunger = 7;
+        init_health = 6;
     }
     else if (setting.Difficulty == Normal)
     {
@@ -260,6 +267,7 @@ void set_game_difficulty()
         secs_increase_heart = 10;
         secs_to_stand_spell = 15;
         init_hunger = 6;
+        init_health = 5;
     }
     else if (setting.Difficulty == Hard)
     {
@@ -279,6 +287,7 @@ void set_game_difficulty()
         secs_increase_heart = 12;
         secs_to_stand_spell = 10;
         init_hunger = 5;
+        init_health = 5;
     }
 }
 void init_game(WINDOW *main, char *_username, int scr)
@@ -303,6 +312,7 @@ void init_game(WINDOW *main, char *_username, int scr)
     bag_win = newwin(LINES - 10, COLS - 20, 5, 10);
     weapon_win = newwin(weapon_page_size, weapon_page_size * 2, (LINES - weapon_page_size) / 2, COLS / 2 - weapon_page_size);
     spell_win = newwin(weapon_page_size, weapon_page_size * 2, (LINES - weapon_page_size) / 2, COLS / 2 - weapon_page_size);
+    food_win = newwin(weapon_page_size, weapon_page_size * 2, (LINES - weapon_page_size) / 2, COLS / 2 - weapon_page_size);
 
     // init threads
     pthread_t hunger_thread, health_thread, spell_thread;
@@ -548,6 +558,7 @@ void attack()
         int x = game->player->x, y = game->player->y;
         show_message("Attack with Arrow!", weapon_icon[Arrow]);
         int nx = x, ny = y;
+
         for (int i = 0; i < 5; i++)
         {
             nx += dx[game->player->dir], ny += dy[game->player->dir];
@@ -568,15 +579,23 @@ void attack()
             if (game->floors[game->cf]->map[nx][ny]->type == Pillar ||
                 game->floors[game->cf]->map[nx][ny]->type == Wall ||
                 game->floors[game->cf]->map[nx][ny]->type == Corridor ||
-                game->floors[game->cf]->map[nx][ny]->type == Door)
-                break;
-
+                game->floors[game->cf]->map[nx][ny]->type == Door){
+                    nx -= dx[game->player->dir], ny -= dy[game->player->dir];
+                    break;
+                }
+                
             mvprintw(nx, ny, "%s", ARROW_UNICODE);
             refresh();
             usleep(60000);
 
             draw_item(nx, ny, game->floors[game->cf]->map[nx][ny]->type);
         }
+        Weapon *wep = malloc(sizeof(Weapon));
+        wep->count = 1;
+        wep->type = Arrow;
+        wep->x = nx, wep->y = ny;
+        wep->active = 1;
+        game->floors[game->cf]->weapons_on_ground[game->floors[game->cf]->weapon_count++] = wep;
     }
     draw_weapons(game->cf);
     draw_monsters(game->cf);
@@ -769,6 +788,28 @@ void show_spells_page()
         break;
     }
 }
+void show_food_page()
+{
+    box(food_win, 0, 0);
+
+    mvwprintw(food_win, 4, 4, "Number of foods %s : %d  (Press 1)", FOOD_UNICODE, game->bag->foods);
+    wrefresh(food_win);
+    refresh();
+    while (1)
+    {
+        int c = getch();
+        if (c == 'k')
+            break;
+        int num = c - '0';
+        if(num == 1 && game->bag->foods){
+            game->player->hunger++, game->bag->foods--;
+            if(game->player->health != init_health)
+                game->player->health++;
+        }
+        update_status();
+        break;
+    }
+}
 void pick_weapon(int i)
 {
     Weapon *weapon = game->floors[game->cf]->weapons_on_ground[i];
@@ -792,6 +833,15 @@ void enter_new_room(int id, int i)
         {
             game->floors[id]->monsters[j]->following = followings[game->floors[id]->monsters[j]->type];
         }
+}
+void draw_enchant_room(int id){
+    int player_x = game->player->x, player_y = game->player->y;
+
+    clear();
+    draw_room(game->floors[id]->enchant_room->room);
+    show_message("Enchant Roooooooom", "");
+    refresh();
+    getch();
 }
 void handle_input()
 {
@@ -888,6 +938,32 @@ void handle_input()
             //saving the game than quit
             save_game(username, game);
             return;
+        }else if(ch == '9'){
+            draw_enchant_room(id);
+        }else if(ch == 'u'){ //move fast
+            
+            while(1){
+                int nx = game->player->x + dx[game->player->dir];
+                int ny = game->player->y + dy[game->player->dir];
+                if(!valid(nx, ny) || game->floors[id]->map[nx][ny]->type == Nothing 
+                    || game->floors[id]->map[nx][ny]->type == Wall 
+                    || game->floors[id]->map[nx][ny]->type == Pillar
+                    || is_monster_on(id, nx, ny) != -1)
+                    break;
+                draw_item(game->player->x, game->player->y, game->floors[id]->map[game->player->x][game->player->y]->type);
+                draw_weapons(id);
+                draw_spells(id);
+                game->player->x = nx;
+                game->player->y = ny;
+                draw_player();   
+                refresh();
+                usleep(50000);
+            }
+            continue;
+        }else if(ch == 'k'){
+            show_food_page();
+            draw_map(id);
+            continue;
         }
         else
             continue;
@@ -945,7 +1021,13 @@ void handle_input()
                 show_message("Ooch! That was a trap", "");
                 update_status();
             }
-
+            if (game->floors[id]->map[nx][ny]->type == HiddenDoor)
+            {
+                // Hidden Door activated
+                game->floors[id]->map[nx][ny]->activated = 1;
+                show_message("Hidden Door!", "");
+                draw_enchant_room(id);
+            }
             // move to upstair
             if (game->floors[id]->map[nx][ny]->type == StairUp)
                 move_to_floor(game->cf + 1);
@@ -972,11 +1054,13 @@ void handle_input()
                 // remove meat from ground
                 game->floors[id]->map[nx][ny]->type = Floor;
 
-                if (game->player->hunger == init_hunger)
-                    continue;
-                game->player->hunger += 1;
+                game->bag->foods++;
                 update_status();
                 show_message("One Food Reicieved", FOOD_UNICODE);
+            }
+            if(game->floors[id]->map[nx][ny]->type == Endpoint){
+                ywin();
+                return;
             }
         }
 
@@ -986,8 +1070,50 @@ void handle_input()
         if (game->player->health <= 0)
         {
             clear();
+            lose();
+            return;
         }
     }
+}
+int calculate_score(){
+    int g = game->player->Golds;
+    int bg = game->player->black_golds;
+    int score = (g + 8 * bg) * (setting.Difficulty + 1);
+    return score;
+}
+void ywin(){
+    for(int i = 0; i < you_win_len; i++)
+    mvprintw((LINES - you_win_len) / 2+i, 20, "%s", you_win[i]);
+
+    int score = calculate_score();
+    mvprintw(2, (COLS - 18)/2, "Your score is: %d", score);
+
+    if(username == "Guest"){
+        mvprintw(LINES - 1, (COLS - 22)/2, "Your score won't be saved");
+    }else{
+        mvprintw(LINES - 1, (COLS - 15)/2, "%s Your score saved", username);
+        PlayerInfo info = load_info(username);
+        info.total_golds += game->player->Golds;
+        info.total_scores += score;
+        info.total_game_played += 1;
+        save_info(username, info);
+    }
+    getch();
+    clear();
+}
+void lose(){
+    for(int i = 0; i < you_lose_len; i++)
+        mvprintw((LINES - you_lose_len) / 2+i, 20, "%s", you_lose[i]);
+
+    if(username == "Guest"){
+        mvprintw(LINES - 1, (COLS - 22)/2, "Your score won't be saved");
+    }else{
+        PlayerInfo info = load_info(username);
+        info.total_game_played += 1;
+        save_info(username, info);
+    }
+    getch();
+    clear();
 }
 void generate_spell(int id, enum SpellType type)
 {
@@ -1102,6 +1228,37 @@ void generate_arrow(int id)
             game->floors[id]->weapons_on_ground[game->floors[id]->weapon_count++] = wep;
             break;
         }
+    }
+}
+void generate_enchant_room(int id){
+    EnchantRoom* enchant = malloc(sizeof(EnchantRoom));
+    int h = enchant_room_size;
+    int w = enchant_room_size * 3;
+    Room* room = create_room((LINES - h) / 2, (COLS - w) / 2, w, h);
+    enchant->room = room;
+
+    enchant->endpoint_x = rand() % (room->h - 4) + room->startx + 2;
+    enchant->endpoint_y = rand() % (room->w - 4) + room->starty + 2;
+
+    game->floors[id]->enchant_room = enchant;
+
+    // ten spell
+    int j = SPELLS_IN_ENCHANT_ROOM, cnt = 0;
+    while (j--)
+    {
+        int x = rand() % (room->h - 4) + room->startx + 2;
+        int y = rand() % (room->w - 4) + room->starty + 2;
+
+        if(x == enchant->endpoint_x && y == enchant->endpoint_y)
+            continue;
+
+        Spell *sp = malloc(sizeof(Spell));
+        sp->count = 1;
+        sp->type = random_num(0, SPELL_TYPES - 1);
+        sp->x = x, sp->y = y;
+        sp->active = 0;
+        enchant->Spells_In_Enchant_room[cnt++] = sp;
+        break;
     }
 }
 void generate_rooms(int id, int stair_room)
@@ -1388,6 +1545,27 @@ void generate_stair_up(int id)
             continue;
         game->floors[id]->map[x][y]->type = StairUp;
         break;
+    }
+}
+void generate_hidden_doors(int id){
+    int find = 0;
+    for (int i = 0; i < game->floors[id]->number_of_rooms; i++)
+    {
+        int j = random_num(1, 100);
+        if (j > HIDDEN_DOOR_PROB)
+            continue;
+        while (1)
+        {
+            int x = rand() % (game->floors[id]->rooms[i]->h - 4) + game->floors[id]->rooms[i]->startx + 2;
+            int y = rand() % (game->floors[id]->rooms[i]->w - 4) + game->floors[id]->rooms[i]->starty + 2;
+            if (game->floors[id]->map[x][y]->type != Floor)
+                continue;
+            game->floors[id]->map[x][y]->type = HiddenDoor;
+            find =  1;
+            break;
+        }
+        if(find == 1)
+            break;
     }
 }
 int check_room_overlap(int startx, int starty, int w, int h, int id)

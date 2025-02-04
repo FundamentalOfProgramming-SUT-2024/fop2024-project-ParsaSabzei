@@ -258,6 +258,8 @@ Tabaghe* load_tabaghe(FILE *file) {
     return tabaghe;
 }
 void save_bag(FILE* file, Bag* bag){
+    fwrite(&bag->foods, sizeof(int), 1, file);
+
     for(int i = 0; i < WEAPON_TYPES; i++){
         save_weapon(file, bag->weapons[i]);
     }
@@ -267,6 +269,7 @@ void save_bag(FILE* file, Bag* bag){
 }
 Bag* load_bag(FILE* file){
     Bag* bag = malloc(sizeof(Bag));
+    fread(&bag->foods, sizeof(int), 1, file);
     for(int i = 0; i < WEAPON_TYPES; i++){
         bag->weapons[i] = load_weapon(file);
     }

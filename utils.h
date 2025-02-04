@@ -11,6 +11,8 @@
 #define STAIR_COLOR 20
 #define BLACK_GOLD_COLOR 21
 
+int random_num(int, int);
+
 int start = 70;
 int is_dig(char ch){
     return (ch >= '0' && ch <= '9');
@@ -22,6 +24,19 @@ int is_lower(char ch){
     return (ch >= 'a' && ch <= 'z');
 }
 
+char* random_password(){
+    char* pass = malloc(sizeof(char) * 100);
+    for(int i = 0; i < 7; i++){
+        if(random_num(0, 1)){
+            pass[i] = random_num(0, 25) + 'A';
+        }else{
+            pass[i] = random_num(0, 25) + 'a';
+        }
+    }
+    pass[7] = random_num(0, 9) + '0';
+    pass[8] = random_num(0, 9) + '0';
+    return pass;
+}
 char* email_regex = "([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]+)$";
 int regex_match(char*msg, char*reg){
     regex_t reegex;

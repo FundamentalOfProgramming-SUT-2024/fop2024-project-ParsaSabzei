@@ -16,7 +16,7 @@ int min_food, max_food;
 int secs_to_hunger;
 int secs_increase_heart;
 int secs_to_stand_spell;
-int init_hunger;
+int init_hunger, init_health;
 
 //higher value force snake to move mroe optimal
 #define SNAKE_RANDOMNESS_MOVE 16
@@ -38,6 +38,8 @@ int init_hunger;
 //x in 100
 #define SPELL_PROB 50
 
+#define SPELLS_IN_ENCHANT_ROOM 20
+
 #define MIN_NUMBER_OF_FLOORS 4
 #define MAX_NUMBER_OF_FLOORS 5
 
@@ -58,6 +60,9 @@ int init_hunger;
 
 #define traps_inc_in_treasure_room 10
 
+//x in 100
+#define HIDDEN_DOOR_PROB 10
+
 // x in 10
 #define black_gold_prob 1
 
@@ -73,6 +78,8 @@ int init_hunger;
 #define rooms_min_distancex 5
 #define rooms_min_distancey 4
 
+#define enchant_room_size 20
+
 enum type{
     Nothing,
     Wall,
@@ -86,7 +93,8 @@ enum type{
     Gold,
     Black_Gold,
     Food,
-    Endpoint
+    Endpoint,
+    HiddenDoor
 };
 
 enum MonsterType{
@@ -153,6 +161,7 @@ typedef struct Bag
 {
     Weapon* weapons[N];
     Spell* spells[N];
+    int foods;
 } Bag;
 
 typedef struct Pair{
@@ -183,9 +192,17 @@ typedef struct Room{
     int discovered;
 } Room;
 
+typedef struct EnchantRoom{
+    Room* room; //Need to save
+    Spell* Spells_In_Enchant_room[N]; //Need to save;
+    int endpoint_x, endpoint_y;
+} EnchantRoom;
+
 typedef struct Tabaghe{
     int number_of_rooms;
     Room** rooms;
+    EnchantRoom* enchant_room; //need to save
+
     Point* map[N][N];
     int monster_count;
     Monster* monsters[N];
@@ -202,15 +219,14 @@ typedef struct Game{
     int ignore_picking;
     Player* player;
     Tabaghe** floors;
-    Bag* bag; //New
-    int active_spells[N]; //New
+    Bag* bag;
+    int active_spells[N]; 
 } Game;
-
 
 
 Game* game;
 WINDOW* status_win;
-WINDOW* bag_win, *weapon_win, *spell_win; //New
+WINDOW* bag_win, *weapon_win, *spell_win, *food_win;
 Settings setting;
 time_t last_time_attacked;
 time_t last_time_spells[SPELL_TYPES];
@@ -222,7 +238,7 @@ char* ARROW_UP_UNICODE = "\u2191";
 char* ARROW_DOWN_UNICODE = "\u2193";
 char* MAGIC_WAND_BULLET = "✹";
 char* ARROW_UNICODE = "⚆";
-char* FOOD_UNICODE = "~";
+char* FOOD_UNICODE = "🍖";
 char* ENDPOINT_UNICODE = "🕊️";
 
 int basic_colors[N];
@@ -252,11 +268,13 @@ void draw_room(Room*);
 void draw_stair_up(int, int);
 void draw_stair_down(int, int);
 void draw_endpoint(int, int);
+void draw_hidden_door(int, int);
 void draw_deamon(int, int);
 void draw_undeed(int, int);
 void draw_fire_breathing(int, int);
 void draw_giant(int, int);
 void draw_weapons(int);
+void draw_spell_room(int);
 int get_room_from_point(int, int, int);
 void activate_room(int, int);
 void activate_corridor(int, int, int);
@@ -271,6 +289,7 @@ void generate_demon(int);
 void generate_giant(int);
 void generate_golds(int);
 void generate_black_golds(int);
+void generate_hidden_doors(int);
 void generate_deamon(int);
 void generate_magic_wand(int);
 void generate_sword(int);
@@ -279,6 +298,8 @@ void generate_snake(int);
 void generate_undeed(int);
 void generate_food(int);
 void generate_spell(int, enum SpellType);
+void generate_enchant_room(int);
+
 void move_to_floor(int);
 void init_status_bar();
 void show_message(char*, char*);
@@ -288,6 +309,7 @@ int is_monster_on(int, int, int);
 int is_weapon_on(int, int, int);
 void show_bag();
 void show_weapons_page();
+void show_food_page();
 void activate_monster(int, int);
 void activate_weapon(int, int);
 void activate_spell(int, int);
@@ -296,6 +318,8 @@ void kill_monster(int, int);
 void remove_weapon(int, int);
 void enter_new_room(int, int);
 void set_game_difficulty();
+void lose();
+void ywin();
 
 int is_monster_on(int id, int nx, int ny){
     for(int i = 0; i < game->floors[id]->monster_count; i++)
@@ -376,6 +400,17 @@ void draw_trap(int i, int j){
         attroff(COLOR_PAIR(TRAP_COLOR)); 
     }
 }
+void draw_hidden_door(int i, int j){
+    if(game->floors[game->cf]->map[i][j]->activated == 0){
+        attron(COLOR_PAIR(ROOM_INSIDE_COLOR));
+        mvprintw(i, j, "0");
+        attroff(COLOR_PAIR(ROOM_INSIDE_COLOR));
+    }else{
+        attron(COLOR_PAIR(TRAP_COLOR));
+        mvprintw(i, j, "]");
+        attroff(COLOR_PAIR(TRAP_COLOR)); 
+    }
+}
 void draw_gold(int i, int j){
     attron(COLOR_PAIR(basic_colors[1]));
     mvaddstr(i, j, GOLD_UNICODE);
@@ -423,7 +458,7 @@ void draw_stair_down(int i, int j){
     attroff(COLOR_PAIR(STAIR_COLOR));    
 }
 void draw_food(int i, int j){
-    mvprintw(i, j, "%s", FOOD_UNICODE);
+    mvprintw(i, j, "%s", "~");
 }
 void draw_item(int i, int j, enum type tp){
     switch(tp){
@@ -461,6 +496,9 @@ void draw_item(int i, int j, enum type tp){
             break;
         case Endpoint:
             draw_endpoint(i, j);
+            break;
+        case HiddenDoor:
+            draw_hidden_door(i, j);
             break;
     }
 }
