@@ -4,16 +4,18 @@
 #include "simpletables.h"
 #include "player_info.h"
 
-void scoreboard_draw_main_screen(WINDOW*, char*);
+void scoreboard_draw_main_screen(char*);
 void scoreboard_handle_input();
 
 char* username;
-const int COLUMN = 6;
+const int COLUMN = 6, max_in_page = 3;
 
 //special names near the 3 best players' names
 char* special_names[] = {"Champion", "Hero", "Master"};
 
-void scoreboard_draw_main_screen(WINDOW* main, char* _username){
+int off = 0, tot;
+
+void scoreboard_draw_main_screen(char* _username){
     username = _username;
     clear();
     st_table *table = st_create_table("Score board:", COLS, COLUMN);
@@ -30,7 +32,7 @@ void scoreboard_draw_main_screen(WINDOW* main, char* _username){
     PlayerInfo info[N];
     int ids[N];
 
-    int tot = user_count();
+    tot = user_count();
     for(int i = 0; i < tot; i++)
         info[i] = load_info(usernames[i]), ids[i] = i;
 
@@ -40,7 +42,8 @@ void scoreboard_draw_main_screen(WINDOW* main, char* _username){
                 swap(&ids[i], &ids[j]);
             }
         }
-    for(int i = 0; i < tot; i++){
+
+    for(int i = off; i < min(tot, off + max_in_page); i++){
         char** c = malloc(COLUMN * sizeof(char*));
         c[0] = tostring(i + 1);
         c[1] = usernames[ids[i]];
@@ -61,5 +64,17 @@ void scoreboard_draw_main_screen(WINDOW* main, char* _username){
 }
 
 void scoreboard_handle_input(){
-
+    while(1){
+        int ch = getch();
+        if(ch == KEY_RIGHT && off + max_in_page <= tot){
+            off += max_in_page;
+            scoreboard_draw_main_screen(username);
+            break;
+        }else if(ch == KEY_LEFT && off){
+            off -= max_in_page;
+            scoreboard_draw_main_screen(username);
+            break;
+        }else
+            continue;
+    }
 } 

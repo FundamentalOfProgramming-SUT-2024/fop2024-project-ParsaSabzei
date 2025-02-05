@@ -47,7 +47,7 @@ void update_status()
     if (game->player->health & 1)
         mvwprintw(status_win, 1, COLS - 25 + (last + 1) * 4, "💔");
 
-    wrefresh(status_win);
+    wrefresh(status_win);    
     refresh();
 }
 void init_status_bar()
@@ -836,12 +836,73 @@ void enter_new_room(int id, int i)
 }
 void draw_enchant_room(int id){
     int player_x = game->player->x, player_y = game->player->y;
+    game->player->x = game->floors[id]->enchant_room->room->startx + 1;
+    game->player->y = game->floors[id]->enchant_room->room->starty + 1;
 
     clear();
     draw_room(game->floors[id]->enchant_room->room);
-    show_message("Enchant Roooooooom", "");
+
+    for(int i = 0; i < SPELLS_IN_ENCHANT_ROOM; i++)
+    {
+        int x = game->floors[id]->enchant_room->Spells_In_Enchant_room[i]->x;
+        int y = game->floors[id]->enchant_room->Spells_In_Enchant_room[i]->y;
+        mvprintw(x, y ,
+                 "%s", spell_icon[game->floors[id]->enchant_room->Spells_In_Enchant_room[i]->type]);
+    }
+
+    wrefresh(game->floors[id]->enchant_room->room->win);
     refresh();
-    getch();
+    show_message("Enchant Roooooooom", "");
+    while(1){
+        int ch = getch();
+        int x = game->player->x, y = game->player->y;
+        int nx = x, ny = y;
+
+        int id = game->cf;
+        if (ch == 'w')
+        {
+            nx--;
+        }
+        else if (ch == 's')
+        {
+            nx++;
+        }
+        else if (ch == 'a')
+        {
+            ny--;
+        }
+        else if(ch == 'd')
+        {
+            ny++;
+        }
+        else if(ch == '9')
+            break;
+        if(nx <= game->floors[id]->enchant_room->room->startx || nx >= game->floors[id]->enchant_room->room->startx + game->floors[id]->enchant_room->room->h - 1)
+            continue;
+        if(ny <= game->floors[id]->enchant_room->room->starty || ny >= game->floors[id]->enchant_room->room->starty + game->floors[id]->enchant_room->room->w - 1)
+            continue;
+        attron(COLOR_PAIR(ROOM_INSIDE_COLOR));
+        mvprintw(game->player->x, game->player->y, ".");
+        attroff(COLOR_PAIR(ROOM_INSIDE_COLOR));
+        game->player->x = nx;
+        game->player->y = ny;
+
+         for(int i = 0; i < SPELLS_IN_ENCHANT_ROOM; i++)
+        {
+            int x = game->floors[id]->enchant_room->Spells_In_Enchant_room[i]->x;
+            int y = game->floors[id]->enchant_room->Spells_In_Enchant_room[i]->y;
+            if(x != nx || y != ny)
+                continue;
+            game->bag->spells[game->floors[id]->enchant_room->Spells_In_Enchant_room[i]->type]->count++;
+        }
+       
+        draw_player();
+    }
+    clear();
+    update_status();
+    game->player->x = player_x;
+    game->player->y = player_y;
+    draw_map(id);
 }
 void handle_input()
 {
@@ -964,6 +1025,8 @@ void handle_input()
             show_food_page();
             draw_map(id);
             continue;
+        }else if(ch == '7'){
+            save_game(username, game);
         }
         else
             continue;
@@ -1246,19 +1309,21 @@ void generate_enchant_room(int id){
     int j = SPELLS_IN_ENCHANT_ROOM, cnt = 0;
     while (j--)
     {
-        int x = rand() % (room->h - 4) + room->startx + 2;
-        int y = rand() % (room->w - 4) + room->starty + 2;
+        while(1){
+            int x = rand() % (room->h - 4) + room->startx + 2;
+            int y = rand() % (room->w - 4) + room->starty + 2;
 
-        if(x == enchant->endpoint_x && y == enchant->endpoint_y)
-            continue;
+            if(x == enchant->endpoint_x && y == enchant->endpoint_y)
+                continue;
 
-        Spell *sp = malloc(sizeof(Spell));
-        sp->count = 1;
-        sp->type = random_num(0, SPELL_TYPES - 1);
-        sp->x = x, sp->y = y;
-        sp->active = 0;
-        enchant->Spells_In_Enchant_room[cnt++] = sp;
-        break;
+            Spell *sp = malloc(sizeof(Spell));
+            sp->count = 1;
+            sp->type = random_num(0, SPELL_TYPES - 1);
+            sp->x = x, sp->y = y;
+            sp->active = 1;
+            enchant->Spells_In_Enchant_room[cnt++] = sp;
+            break;
+        }
     }
 }
 void generate_rooms(int id, int stair_room)

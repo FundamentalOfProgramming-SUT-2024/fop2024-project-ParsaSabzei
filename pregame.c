@@ -11,6 +11,31 @@ WINDOW** btns;
 
 void pregame_draw_main_screen(WINDOW* main, char* _username){
     username = _username;
+    {
+        //Loading sdl
+        if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+            printf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
+            return;
+        }
+
+        if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
+            printf("SDL_mixer could not initialize! SDL_mixer Error: %s\n", Mix_GetError());
+            return;
+        }
+
+        Mix_Music *music = Mix_LoadMUS("asset/background_music.mp3");
+        if (music == NULL) {
+            printf("Failed to load music! SDL_mixer Error: %s\n", Mix_GetError());
+            return;
+        }
+
+        Settings set;
+        set = load_settings(username);
+        if(set.play_music)
+            Mix_PlayMusic(music, -1);
+    }
+    
+
 
     int sword_heart_posx = 3, sword_heart_posy = 3;
     int rogy_posx = 3, rogy_posy = COLS/2 - 15;

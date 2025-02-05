@@ -31,7 +31,7 @@ void newuser_draw_main_screen(WINDOW* main){
 
     //Info
     move(2, COLS/2 - 14);
-    printw("Press 1 to generate password randomly");
+    printw("Press ! to generate password randomly");
 
     refresh();
     // Inputs
@@ -56,7 +56,7 @@ void newuser_handle_input(){
     while(true){
         int ch = getch();
 
-        if(ch == '1'){
+        if(ch == '!'){
             char*pass = random_password();
             for(int i = 0; i < strlen(pass); i++)
                 write_inp(inps[1], pass[i], inp_padding);

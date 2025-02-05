@@ -1,6 +1,7 @@
 void loginuser_draw_main_screen();
 char* loginuser_handle_uinput();
 char* uvalidation();
+void throw_error(char*);
 
 #define uinp_count 4
 #define uinp_padding 5
@@ -35,8 +36,8 @@ void loginuser_draw_main_screen(WINDOW* main){
     box(main, 0, 0);
 
     //Info
-    move(2, COLS/2 - 14);
-    printw("Please enter your information...");
+    move(2, COLS/2 - 18);
+    printw("Please enter your information");
 
     refresh();
     // uinputs
@@ -68,11 +69,21 @@ void loginuser_draw_main_screen(WINDOW* main){
     move(7, y+3);
 }
 
+void throw_error(char* err){
+    //Erase Previous Error
+    move(1, 0);
+    for(int i = 0; i < COLS; i++)
+        printw(" ");
+    int i = red();
+    attron(COLOR_PAIR(i));
+    mvprintw(1, COLS/2-strlen(err)/2, "%s", err);
+    attroff(COLOR_PAIR(i));
+}
 char* loginuser_handle_uinput(){
     int cur_input = 0;
     while(true){
         int ch = getch();
-
+        
         //Ignore ENTER when btn is not selected
         if(ch == 10 && cur_input < 2)
             continue;
@@ -84,16 +95,7 @@ char* loginuser_handle_uinput(){
                     //Pass username
                     return uuinps[0]->content;
                 }else {  
-                    //Erase Previous Error
-                    move(1, 0);
-                    for(int i = 0; i < COLS; i++)
-                        printw(" ");
-
-                    //Show the error
-                    int i = red();
-                    attron(COLOR_PAIR(i));
-                    mvprintw(1, COLS/2-strlen(res)/2, "%s", res);
-                    attroff(COLOR_PAIR(i));
+                    throw_error(res);
                     continue;
                 }
             }

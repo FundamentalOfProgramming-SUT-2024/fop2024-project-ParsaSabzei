@@ -103,6 +103,33 @@ int match_password(char*username, char*password){
     fclose(fp);
     return 0;
 }
+//if hint matches username returns password
+char* match_hint(char*username, char*hint){
+    FILE* fp = fopen(users_file_path, "r");
+    char buffer[maxbuf];
+
+    char*pass = "";
+    while (fgets(buffer, maxbuf, fp)) {
+        int column = 0;
+        char* value = strtok(buffer, ", ");
+        int here = 0;
+        while (value) {
+            if (column == 0 && !strcmp(value, username)) 
+                here = 1;
+            if(here && column == 1)
+                pass = value;
+            if(column == 3 && here){
+                if(!strcmp(value, hint))
+                    return pass;
+                return "";
+            }
+            value = strtok(NULL, ", ");
+            column++;
+        }
+    }
+    fclose(fp);
+    return 0;
+}
 void save_info(char*username, PlayerInfo info){
     FILE* file = fopen(get_player_info_file_path(username), "wb");
     fwrite(&info, sizeof(info), 1, file);
@@ -135,7 +162,7 @@ Settings load_settings(char* username){
     Settings set;
     FILE* file = fopen(get_settings_file_path(username), "rb");
     if(file == NULL){
-        set.Difficulty = 0, set.Player_Color = 0;
+        set.Difficulty = 0, set.Player_Color = 0, set.play_music = 0;
         return set;
     }
     fread(&set, sizeof(set), 1, file);
@@ -175,6 +202,23 @@ Spell* load_spell(FILE* file){
     Spell *spell = malloc(sizeof(Spell));
     fread(spell, sizeof(Spell), 1, file);
     return spell;
+}
+void save_enchant(FILE* file, EnchantRoom* room){
+    save_room(file, room->room);
+    for(int i = 0; i < SPELLS_IN_ENCHANT_ROOM; i++)
+        save_spell(file, room->Spells_In_Enchant_room[i]);
+    fwrite(&room->endpoint_x, sizeof(int), 1, file);
+    fwrite(&room->endpoint_y, sizeof(int), 1, file);
+    
+}
+EnchantRoom* load_enchant(FILE* file){
+    EnchantRoom *room = malloc(sizeof(EnchantRoom));
+    room->room = load_room(file);
+    for(int i = 0; i < SPELLS_IN_ENCHANT_ROOM; i++)
+        room->Spells_In_Enchant_room[i] = load_spell(file);
+    fread(&room->endpoint_x, sizeof(int), 1, file);
+    fread(&room->endpoint_y, sizeof(int), 1, file);
+    return room;
 }
 void save_monster(FILE* file, Monster* monster){
     fwrite(monster, sizeof(Monster), 1, file);
@@ -225,6 +269,8 @@ void save_tabaghe(FILE* file, Tabaghe* tabaghe){
     for(int i = 0; i < tabaghe->spell_count; i++){
         save_spell(file, tabaghe->spells_on_ground[i]);
     }
+
+    save_enchant(file, tabaghe->enchant_room);
 }
 Tabaghe* load_tabaghe(FILE *file) {
     Tabaghe *tabaghe = malloc(sizeof(Tabaghe));
@@ -255,6 +301,8 @@ Tabaghe* load_tabaghe(FILE *file) {
     for(int i = 0; i < tabaghe->spell_count; i++){
         tabaghe->spells_on_ground[i] = load_spell(file);
     }
+
+    tabaghe->enchant_room = load_enchant(file);
     return tabaghe;
 }
 void save_bag(FILE* file, Bag* bag){

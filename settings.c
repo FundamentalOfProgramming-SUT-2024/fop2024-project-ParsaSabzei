@@ -6,10 +6,10 @@ void settings_handle_input();
 
 
 Settings setting;
-WINDOW* bts[6];
+WINDOW* bts[8];
 char* username;
-int btn_cnt = 6;
-int colors[6];
+int btn_cnt = 8;
+int colors[8];
 
 void settings_draw_main_screen(WINDOW* main, char* _username){
     username = _username;
@@ -61,14 +61,30 @@ void settings_draw_main_screen(WINDOW* main, char* _username){
     WINDOW* easy_btn = create_button(5, COLS/3 - 18, 15, 13, colors[3], "Easy");
     WINDOW* normal_btn = create_button(5, COLS/3 - 18, 15, 26 + COLS/3 - 18, colors[4], "Normal");
     WINDOW* hard_btn = create_button(5, COLS/3 - 18, 15, 39 + 2*(COLS/3 - 18), colors[5], "Hard");
- 
+
+    WINDOW* music_win = newwin(10, COLS - 4, 22, 2);
+    box(music_win, 0, 0);
+
+    char* msc = "Play";
+    if(setting.play_music == 0)
+        msc = "Dont Play";
+        
+    mvwprintw(music_win, 0, 3, "Current music preferences: %s", msc);
+    refresh();
+    wrefresh(music_win);
+
+    for(int i = 6; i < 8; i++)
+        colors[i] = i + 2;
+    WINDOW* play_btn = create_button(5, COLS/2 - 18, 25, 13, colors[3], "Play");
+    WINDOW* dplay_btn = create_button(5, COLS/2 - 18, 25, 26 + COLS/2 - 18, colors[4], "Dont play");
+    
     bts[0] = red_btn, bts[1] = yellow_btn, bts[2] = blue_btn;
     bts[3] = easy_btn, bts[4] = normal_btn, bts[5] = hard_btn;
-
+    bts[6] = play_btn, bts[7] = dplay_btn;
     settings_handle_input();
 }
 
- int curr_btn = 0;
+int curr_btn = 0;
 
 void settings_handle_input(){
     int active[btn_cnt];
@@ -86,10 +102,12 @@ void settings_handle_input(){
             curr_btn = (curr_btn + btn_cnt - 1) % btn_cnt;
             des = 1;
         }else if(c == 10 || c == 'c'){
-            if(curr_btn >= 3)
+            if(curr_btn >= 3 && curr_btn < 6)
                 setting.Difficulty = curr_btn - 3;
-            else
+            else if(curr_btn < 3)
                 setting.Player_Color = curr_btn;
+            else
+                setting.play_music = ((curr_btn - 6) ^ 1);
             save_settings(setting, username);
             return;
         }else   //Ignore others

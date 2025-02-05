@@ -194,7 +194,8 @@ typedef struct Room{
 
 typedef struct EnchantRoom{
     Room* room; //Need to save
-    Spell* Spells_In_Enchant_room[N]; //Need to save;
+    Spell* Spells_In_Enchant_room[N];
+    
     int endpoint_x, endpoint_y;
 } EnchantRoom;
 

@@ -1,4 +1,6 @@
 #include <ncursesw/ncurses.h> 
+#include <SDL.h>
+#include <SDL_mixer.h>
 
 #include<stdio.h>
 #include<stdlib.h>
@@ -31,7 +33,7 @@ int main(){
     //init
     srand(time(0));
 
-   // do_art();
+    do_art();
     clear();
     
     WINDOW* mn = initscr();
@@ -64,7 +66,7 @@ int main(){
                 settings_draw_main_screen(mn, username);
                 break;
             }else if(scr == 3){  //scoreboard
-                scoreboard_draw_main_screen(mn, username);
+                scoreboard_draw_main_screen(username);
             }
         }
     }
